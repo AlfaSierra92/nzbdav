@@ -67,6 +67,16 @@ class BackendClient {
         return data.authenticated;
     }
 
+    public async getDashboardStatistics(period: string, date: string): Promise<DashboardStatistics> {
+        const query = new URLSearchParams({ period, date });
+        const response = await fetch(`${process.env.BACKEND_URL}/api/dashboard-statistics?${query}`, {
+            headers: { "x-api-key": process.env.FRONTEND_BACKEND_API_KEY || "" },
+            signal: AbortSignal.timeout(10000),
+        });
+        if (!response.ok) throw new Error("Dashboard statistics unavailable");
+        return response.json();
+    }
+
     public async getQueue(limit: number): Promise<QueueResponse> {
         const url = process.env.BACKEND_URL + `/api?mode=queue&limit=${limit}`;
 
@@ -331,3 +341,30 @@ export enum RepairAction {
     Deleted = 2,
     ActionNeeded = 3,
 }
+
+export type DashboardStatistics = {
+    period: "day" | "week" | "month";
+    start: number;
+    end: number;
+    lastCapture: number | null;
+    lastSaved: number | null;
+    pendingSamples: number;
+    currentQueue: number | null;
+    flushIntervalSeconds: number;
+    collectionError: boolean;
+    buckets: DashboardStatisticsBucket[];
+};
+
+export type DashboardStatisticsBucket = {
+    time: number;
+    samples: number;
+    connectionSamples: number;
+    averageActive: number | null;
+    peakActive: number | null;
+    averageQueue: number | null;
+    completed: number;
+    failed: number;
+    importedBytes: number;
+    healthChecks: number;
+    healthyChecks: number;
+};

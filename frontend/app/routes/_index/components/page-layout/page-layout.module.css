@@ -32,6 +32,9 @@
     left: 0;
     z-index: 999;
     top: var(--top-nav-height);
+    bottom: 0;
+    overflow-y: auto;
+    border-right: 1px solid #24333e;
 }
 
 .body {

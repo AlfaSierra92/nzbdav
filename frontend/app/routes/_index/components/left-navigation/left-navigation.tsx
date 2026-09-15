@@ -12,6 +12,10 @@ export type LeftNavigationProps = {
 export function LeftNavigation({ version, isFrontendAuthDisabled }: LeftNavigationProps) {
     return (
         <div className={styles.container}>
+            <Item target="/dashboard">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+                <div className={styles.title}>Dashboard</div>
+            </Item>
             <Item target="/queue">
                 <div className={styles["queue-icon"]} />
                 <div className={styles.title}>Queue & History</div>

@@ -12,6 +12,11 @@ public class WebsocketManager
     private readonly HashSet<WebSocket> _authenticatedSockets = [];
     private readonly Dictionary<WebsocketTopic, string> _lastMessage = new();
 
+    public string? GetLastMessage(WebsocketTopic topic)
+    {
+        lock (_lastMessage) return _lastMessage.GetValueOrDefault(topic);
+    }
+
     public async Task HandleRoute(HttpContext context)
     {
         if (context.WebSockets.IsWebSocketRequest)

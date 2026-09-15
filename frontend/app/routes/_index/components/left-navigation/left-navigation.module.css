@@ -1,7 +1,7 @@
 .container {
     padding: 20px;
     padding-top: 30px;
-    color: #93a1a1;
+    color: #9eafbd;
     position: absolute;
     width: 100%;
     min-height: 100%;
@@ -37,7 +37,8 @@
 }
 
 .selected {
-    background-color: hsl(192, 100%, 11%);
+    background-color: #193b35;
+    color: #71e4c3;
     user-select: none;
 }
 
@@ -87,14 +88,12 @@
 }
 
 .title {
-    font-size: 20px;
+    font-size: 15px;
 }
 
 .footer {
-    position: absolute;
-    padding: 20px;
-    bottom: 0;
-    left: 0;
+    padding-top: 48px;
+    font-size: 12px;
     width: 100%;
 }
 
@@ -139,3 +138,4 @@
     background-size: 100% 100%;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%2393a1a1' d='M5 21q-.825 0-1.412-.587T3 19V5q0-.825.588-1.412T5 3h6q.425 0 .713.288T12 4t-.288.713T11 5H5v14h6q.425 0 .713.288T12 20t-.288.713T11 21zm12.175-8H10q-.425 0-.712-.288T9 12t.288-.712T10 11h7.175L15.3 9.125q-.275-.275-.275-.675t.275-.7t.7-.313t.725.288L20.3 11.3q.3.3.3.7t-.3.7l-3.575 3.575q-.3.3-.712.288t-.713-.313q-.275-.3-.262-.712t.287-.688z'/%3E%3C/svg%3E");
 }
+.item:focus-visible { outline: 2px solid #63dfc0; outline-offset: 3px; }

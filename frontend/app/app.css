@@ -1,9 +1,9 @@
 :root {
   --top-nav-height: 60px;
   --left-nav-width: 270px;
-  --body-background-color: hsl(198 100% 4%);
-  --top-nav-background-color: hsl(200 100% 7.65%);
-  --left-nav-background-color: hsl(196.8 100% 4.9%);
+  --body-background-color: #0b151e;
+  --top-nav-background-color: #101e29;
+  --left-nav-background-color: #0e1a24;
   --page-padding: 25px;
 }
 
