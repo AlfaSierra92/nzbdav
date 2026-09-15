@@ -16,3 +16,8 @@ nuget
 
 .idea/
 .vscode/
+nzbdav/db.sqlite
+nzbdav/dashboard/statistics-v1.sqlite
+nzbdav/dashboard/statistics-v1.sqlite-shm
+nzbdav/dashboard/statistics-v1.sqlite-wal
+nzbdav/data-protection/key-1ae96667-2295-4613-a9d6-964b638a8626.xml
