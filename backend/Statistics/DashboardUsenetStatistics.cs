@@ -16,6 +16,7 @@ public sealed partial class DashboardStatisticsStore
         {
             var frame = UsenetTelemetry.Shared.Capture();
             _liveTelemetry = frame;
+            RecordArticleMemory(frame.Time, frame.ArticleMemory);
             _recentFrames.Enqueue(frame);
             while (_recentFrames.TryPeek(out var first) && first.Time <= frame.Time - 60) _recentFrames.Dequeue();
             var minute = frame.Time / 60 * 60;
@@ -116,11 +117,16 @@ public sealed partial class DashboardStatisticsStore
                 return sum;
             }).ToArray();
             var heatmap = points.GroupBy(item => item.Time / 3600 * 3600).Select(group => new { time=group.Key, articles=group.Sum(item=>item.Articles) }).ToArray();
+            var memoryPoints = await ReadArticleMemoryAsync(start, end, step, ct);
+            var memory = _liveTelemetry?.ArticleMemory;
             return new { range, start=range=="all" ? points.FirstOrDefault()?.Time ?? end : start, end, step,
                 live=_liveTelemetry, errorsLastMinute=_recentFrames.Sum(frame=>frame.HardFailures),
                 articlesLastMinute=_recentFrames.Sum(frame=>frame.Providers.Sum(provider=>provider.Articles)),
                 totals=total, providers, points, heatmap, lastSaved=_lastSaved, collectionError=LastError is not null,
-                articleRamBytes=(long?)null, articleRamCapBytes=(long?)null };
+                articleRamBytes=memory?.AllocatedBytes, articleBufferedBytes=memory?.BufferedBytes,
+                articleRamCapBytes=memory?.LimitBytes, articleRamTransportBytes=memory?.TransportBytes,
+                articleRamDecoderBytes=memory?.DecoderBytes, articleRamPeakBytes=memory?.PeakAllocatedBytes,
+                articleRamLimitRejections=memory?.LimitRejections, memoryPoints };
         }
         finally { _gate.Release(); }
     }

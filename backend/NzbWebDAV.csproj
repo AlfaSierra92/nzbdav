@@ -19,11 +19,12 @@
       <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
       <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
       <PackageReference Include="SharpCompress" Version="0.39.0" />
-      <PackageReference Include="UsenetSharp" Version="1.0.6" />
+      <ProjectReference Include="Vendor/UsenetSharp/UsenetSharp/UsenetSharp.csproj" />
       <PackageReference Include="ZstdSharp.Port" Version="0.8.7" />
     </ItemGroup>
 
     <ItemGroup>
+      <Compile Remove="Vendor/**/*.cs" />
       <EmbeddedResource Include="Api\SabControllers\GetConfig\config_template.json" />
       <EmbeddedResource Include="WebDav\StaticFiles\root\README.md" />
     </ItemGroup>

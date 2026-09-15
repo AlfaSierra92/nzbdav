@@ -20,7 +20,7 @@ public sealed partial class DashboardStatisticsStore
     public int FlushIntervalSeconds { get; } = int.TryParse(
         Environment.GetEnvironmentVariable("DASHBOARD_STATS_FLUSH_SECONDS"), out var seconds)
         ? Math.Clamp(seconds, 60, 86400) : 900;
-    public bool BufferLimitReached => _samples.Count + _imports.Count + _checks.Count + _telemetry.Count >= 10000;
+    public bool BufferLimitReached => _samples.Count + _imports.Count + _checks.Count + _telemetry.Count + _memoryMinutes.Count >= 10000;
 
     public async Task<SqliteConnection> OpenAsync(CancellationToken ct, bool readOnly = false)
     {
@@ -54,6 +54,9 @@ public sealed partial class DashboardStatisticsStore
                 articles INTEGER NOT NULL, bytes INTEGER NOT NULL, misses INTEGER NOT NULL, errors INTEGER NOT NULL,
                 retries INTEGER NOT NULL, ok_ms REAL NOT NULL, outage_seconds REAL NOT NULL, observed_seconds REAL NOT NULL,
                 served_bytes INTEGER NOT NULL, peak_bps REAL NOT NULL, hard_failures INTEGER NOT NULL, PRIMARY KEY(time,provider));
+            CREATE TABLE IF NOT EXISTS article_memory_minutes (
+                time INTEGER PRIMARY KEY, samples INTEGER NOT NULL, allocated_sum INTEGER NOT NULL,
+                buffered_sum INTEGER NOT NULL, peak_allocated INTEGER NOT NULL, peak_buffered INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value INTEGER NOT NULL);
             """;
         await command.ExecuteNonQueryAsync(ct);
@@ -118,7 +121,7 @@ public sealed partial class DashboardStatisticsStore
         await _gate.WaitAsync(ct);
         try
         {
-            if (_samples.Count == 0 && _imports.Count == 0 && _checks.Count == 0 && _telemetry.Count == 0) return;
+            if (_samples.Count == 0 && _imports.Count == 0 && _checks.Count == 0 && _telemetry.Count == 0 && _memoryMinutes.Count == 0) return;
             await using var connection = await OpenAsync(ct);
             using var transaction = connection.BeginTransaction();
             foreach (var sample in _samples.Values)
@@ -133,7 +136,10 @@ public sealed partial class DashboardStatisticsStore
                     ("$id", item.Id), ("$time", item.Time), ("$healthy", item.Healthy ? 1 : 0));
             if (_lastCapture is not null) await Execute("INSERT INTO metadata VALUES ('lastCapture', $time) ON CONFLICT(key) DO UPDATE SET value = excluded.value WHERE metadata.value < excluded.value", ("$time", _lastCapture));
             await FlushTelemetryAsync(connection, transaction, ct);
+            await FlushArticleMemoryAsync(connection, transaction, ct);
             transaction.Commit();
+            _memoryMinutes.Clear();
+            _memoryCache.Clear();
             _telemetry.Clear();
             _telemetryCache.Clear();
             _lastSaved = _lastCapture;

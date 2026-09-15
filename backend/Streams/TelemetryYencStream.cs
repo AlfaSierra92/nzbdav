@@ -7,7 +7,7 @@ namespace NzbWebDAV.Streams;
 
 // Delegate decoding unchanged; count decoded bytes actually read, never file-size estimates.
 public sealed class TelemetryYencStream(YencStream inner, ProviderTelemetry telemetry, UsenetTelemetry.ReadSession? read)
-    : YencStream(Null)
+    : YencStream(Null, allocateBuffers: false)
 {
     private int _disposed;
     private int _failed;
@@ -41,7 +41,7 @@ public sealed class TelemetryYencStream(YencStream inner, ProviderTelemetry tele
     }
     public override async ValueTask DisposeAsync()
     {
-        if (Interlocked.Exchange(ref _disposed, 1) == 0) await inner.DisposeAsync().ConfigureAwait(false);
-        GC.SuppressFinalize(this);
+        try { if (Interlocked.Exchange(ref _disposed, 1) == 0) await inner.DisposeAsync().ConfigureAwait(false); }
+        finally { base.Dispose(true); GC.SuppressFinalize(this); }
     }
 }

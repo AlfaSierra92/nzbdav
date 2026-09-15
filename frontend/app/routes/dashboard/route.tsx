@@ -4,6 +4,7 @@ import type { Route } from "./+types/route";
 import { backendClient } from "~/clients/backend-client.server";
 import "./dashboard.css";
 import { UsenetOverview } from "./usenet-overview";
+import { SectionOrder } from "./section-order";
 import { HistoricalStatistics } from "./historical-statistics";
 
 export function meta() { return [{ title: "Dashboard · Nzb DAV" }]; }
@@ -103,16 +104,16 @@ export default function Dashboard({ loaderData: { queue, history, health, statis
             <button className="dash-button" disabled={revalidator.state !== "idle"} onClick={() => void revalidator.revalidate()}>{revalidator.state === "idle" ? "↻ Refresh" : "Refreshing…"}</button>
         </header>
         {(!queue || !history || !health) && <div className="dash-warning" role="status">Some statistics are unavailable. Check your backend connection and refresh.</div>}
-        <UsenetOverview />
-        <details className="dash-additional"><summary>Import queue, library health & connection history</summary>
+        <SectionOrder storageKey="dashboard-sections-v1" labels={{ imports: "Import queue & summary", usenet: "Usenet overview", history: "Saved history", connections: "Connection activity", pool: "Connection pool", activity: "Recent imports", health: "Library health" }}>
         <section className="dash-metrics" aria-label="Overview">
             <Metric label="Active connections" value={number(active)} caption={current ? `of ${current.max} available connections` : "Waiting for Usenet telemetry"} />
             <Metric label="In queue" value={number(liveQueue ?? queue?.noofslots)} caption="NZBs waiting or processing" />
             <Metric label="Successful imports" value={history?.slots.length ? `${Math.round(completed / history.slots.length * 100)}%` : "—"} caption={`Across ${history?.slots.length ?? 0} recent history entries`} />
             <Metric label="Imported size" value={history ? bytes(history.slots.filter(slot => slot.status === "Completed").reduce((sum, slot) => sum + slot.bytes, 0)) : "—"} caption="Completed NZBs in recent history" />
         </section>
+        <UsenetOverview />
         <HistoricalStatistics statistics={statistics} period={period} date={date} onQueueUpdate={setLiveQueue} />
-        <div className="dash-grid">
+
             <section className="dash-panel dash-chart">
                 <div className="dash-panel-heading"><div><h2>Connection activity</h2><p>Active connections · last 2 minutes in this session</p></div><span className={`dash-badge ${connected ? "" : "muted"}`}>{connected ? "● Live" : "○ Reconnecting"}</span></div>
                 <div className="dash-chart-value">{number(active)} <span>active now</span></div>
@@ -136,8 +137,7 @@ export default function Dashboard({ loaderData: { queue, history, health, statis
                 <div className="dash-health"><strong>{healthCount ? `${Math.round(healthy / healthCount * 100)}%` : "—"}</strong><span>healthy checks</span></div>
                 <div className="dash-summary"><span>Checks recorded<b>{number(healthCount)}</b></span><span>Healthy<b>{health ? number(healthy) : "—"}</b></span><span>Failed recent imports<b>{history ? number(failed) : "—"}</b></span></div>
             </section>
-        </div>
-        </details>
+        </SectionOrder>
         <footer className="dash-footnote">Connections, queue and saved-history view refresh every second. Import and health data refresh every 15 seconds. Import statistics use the latest 100 history entries; imported size is NZB content size, not network traffic.</footer>
     </main>;
 }

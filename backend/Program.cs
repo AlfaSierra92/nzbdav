@@ -20,6 +20,7 @@ using NzbWebDAV.WebDav;
 using NzbWebDAV.WebDav.Base;
 using NzbWebDAV.Websocket;
 using Serilog;
+using UsenetSharp.Diagnostics;
 using Serilog.Events;
 using Serilog.Sinks.SystemConsole.Themes;
 
@@ -50,6 +51,15 @@ class Program
             .MinimumLevel.Override("Microsoft.AspNetCore.DataProtection", LogEventLevel.Error)
             .WriteTo.Console(theme: AnsiConsoleTheme.Code)
             .CreateLogger();
+
+        // Optional process-wide budget for buffers retained by article pipes and decoders.
+        var rawArticleLimit = EnvironmentUtil.GetEnvironmentVariable("USENET_ARTICLE_RAM_LIMIT_MB");
+        if (rawArticleLimit is not null)
+        {
+            if (!long.TryParse(rawArticleLimit, out var megabytes) || megabytes < 0 || megabytes > long.MaxValue / (1024 * 1024))
+                throw new ArgumentException("USENET_ARTICLE_RAM_LIMIT_MB must be a non-negative integer (MiB); 0 means unlimited.");
+            ArticleMemory.ConfigureLimit(megabytes == 0 ? null : megabytes * 1024 * 1024);
+        }
 
         // Block upgrades to version 0.6.x
         BlockUpgradesToV06X();

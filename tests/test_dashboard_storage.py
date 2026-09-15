@@ -13,6 +13,8 @@ SOURCE = (Path(__file__).resolve().parents[1] / "backend/Statistics/DashboardSta
 SCHEMA = re.search(r'command.CommandText = """(.*?)""";', SOURCE, re.S).group(1)
 QUERIES = re.findall(r'await Read\("""(.*?)""", reader', SOURCE, re.S)
 TELEMETRY_SOURCE = (Path(__file__).resolve().parents[1] / "backend/Statistics/DashboardUsenetStatistics.cs").read_text()
+MEMORY_SOURCE = (Path(__file__).resolve().parents[1] / "backend/Statistics/DashboardArticleMemory.cs").read_text()
+MEMORY_SQL = re.findall(r'command.CommandText = """(.*?)""";', MEMORY_SOURCE, re.S)
 TELEMETRY_SQL = re.findall(r'command.CommandText = """(.*?)""";', TELEMETRY_SOURCE, re.S)
 INSERTS = re.findall(r'await Execute\("([^"]+)"', SOURCE)
 
@@ -156,6 +158,28 @@ class DashboardStorageTests(unittest.TestCase):
         self.db.close()
         self.db = sqlite3.connect(self.path)
         self.assertEqual(self.telemetry_read()[0][3], 6)
+
+    def test_memory_rollups_keep_weighted_averages_and_peaks(self):
+        first = dict(time=60, samples=2, allocated=6000, buffered=3000, peakAllocated=4000, peakBuffered=2000)
+        second = dict(time=60, samples=1, allocated=9000, buffered=5000, peakAllocated=9000, peakBuffered=5000)
+        self.db.execute(MEMORY_SQL[0], first)
+        self.db.commit()
+        self.db.execute(MEMORY_SQL[0], second)
+        self.db.commit()
+        row = self.db.execute(MEMORY_SQL[1], dict(start=0, end=3600, step=3600)).fetchone()
+        self.assertEqual(row, (0, 3, 15000, 8000, 9000, 5000))
+        self.assertEqual(row[2] / row[1], 5000)
+        self.assertEqual(self.db.execute(MEMORY_SQL[1], dict(start=0, end=60, step=60)).fetchall(), [])
+
+    def test_memory_flush_rollback_and_reopen(self):
+        values = dict(time=60, samples=1, allocated=1000, buffered=500, peakAllocated=1000, peakBuffered=500)
+        self.db.execute(MEMORY_SQL[0], values)
+        self.db.commit()
+        self.db.execute(MEMORY_SQL[0], values)
+        self.db.rollback()
+        self.db.close()
+        self.db = sqlite3.connect(self.path)
+        self.assertEqual(self.db.execute(MEMORY_SQL[1], dict(start=0, end=3600, step=60)).fetchone(), (60, 1, 1000, 500, 1000, 500))
 
     def test_failed_content_is_excluded_and_health_outcomes_are_counted(self):
         self.job()

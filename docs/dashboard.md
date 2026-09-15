@@ -88,7 +88,7 @@ The top dashboard section implements the reference statistics using new runtime 
 | Avg OK ms | Mean successful BODY/ARTICLE response latency after acquiring the connection, excluding pool wait and later body consumption. It is not total article download duration. |
 | Outages | Sampled elapsed time while the provider circuit breaker is open. Short outages between samples may not be observed. |
 | Share | Provider decoded bytes divided by all providers' decoded bytes in the selected range. |
-| Article RAM / cap | **Unavailable (`null`, displayed as “—”)**: this version of UsenetSharp exposes neither retained article buffer bytes nor a global byte cap. `usenet.article-buffer-size` is a per-stream article-count setting, not a byte limit. Process/GC memory is deliberately not substituted for article RAM. |
+| Article RAM / cap | Actual capacity of buffers currently owned by BODY/ARTICLE pipes and yEnc decoders, exposed by the locally instrumented UsenetSharp library. Buffered bytes count unread encoded/decoded data. The optional cap applies to this owned capacity; see below. |
 
 Live read cards show the filename, user agent (Plex/Jellyfin when identifiable), connection peer address, range-adjusted byte offset, total file size where known, client throughput, and decoded bytes attributed to each provider using an `AsyncLocal` request context. The connection peer can be the frontend/reverse proxy, not necessarily the original client IP. Client/session details exist only in RAM and are not archived. Disposal removes the request; failures and cancellations pass through the existing transfer flow.
 
@@ -105,6 +105,16 @@ Provider identity is a truncated SHA-256 digest of host, port, SSL mode and user
 - `/api/usenet-statistics?range=24h` uses the existing API-key authentication. It merges cached archive aggregates with pending memory counters. UI refresh runs once per second while visible, without overlapping requests, and aborts on navigation/timeout. Persisted query results are cached per range/minute and invalidated after flush.
 - The 1h/24h chart uses minute buckets; 7d/30d uses hourly buckets expressed as articles/minute; All uses daily buckets. The heatmap uses hours (days for All). Missing observed periods are not backfilled. Rates are sampled, so events between ticks are included in the next delta, but short-lived sessions can start and finish between UI updates.
 
+### Article memory
+
+The backend builds the local UsenetSharp 1.0.6 source in `backend/Vendor/UsenetSharp` with buffer instrumentation (see `PATCHES.md` there). Pool rentals count their actual capacity, including unused capacity; disposing streams returns their reservations. Decoder decorators and disk-cache streams avoid allocating unused decoding buffers.
+
+The dashboard shows allocated capacity, unread buffered data, receive/decoder breakdown and the peak since process start. These values exclude process RSS, buffers retained by idle shared pools, socket/TLS/StreamReader buffers, object overhead and caller-owned output buffers. Buffered data is an instantaneous sampled gauge, not an exact process-memory measurement.
+
+Set `USENET_ARTICLE_RAM_LIMIT_MB=512` to limit retained article-buffer capacity to 512 MiB. Unset or `0` means unlimited, preserving existing behavior. Invalid or negative values prevent startup. The limit is global across article pipes and decoders; `usenet.article-buffer-size` remains a separate per-stream article-count setting. A rental is checked before being published and returned immediately if rejected; temporary allocator activity is outside this limit. **Reaching the cap fails the affected fetch and can interrupt playback**; it does not wait or spill to disk. Producer errors now propagate to readers instead of appearing as successful truncated EOF. The dashboard also reports rejected allocations since startup.
+
+Memory is sampled every second with existing telemetry. `article_memory_minutes` stores sample counts, allocated/buffered sums and sampled peaks in the separate dashboard archive. Day/week/month views merge saved and pending values, using weighted averages and maximum peaks. These rows share the existing 15-minute transaction and shutdown flush, with no per-second disk writes and no application-database migrations. Historical memory starts with this version; earlier periods are not reconstructed.
+
 ## Validation
 
 Executed:
@@ -113,13 +123,14 @@ Executed:
 python3 -m unittest discover -s tests -v
 ```
 
-Twelve tests exercise the actual SQL extracted from the store: file reopening, idempotent replay, transaction rollback, period boundaries, missing versus zero connection telemetry, import/health aggregation, 15 minute samples committed together, replays that do not rewrite stored values, and 900 distinct second samples saved in one batch, provider-minute aggregation across flushes, separation of provider bytes and served bytes, and retry after a rolled-back telemetry transaction. They do not execute the C# service or React components.
+Fourteen tests exercise the actual SQL extracted from the store: file reopening, idempotent replay, transaction rollback, period boundaries, missing versus zero connection telemetry, import/health aggregation, 15 minute samples committed together, replays that do not rewrite stored values, and 900 distinct second samples saved in one batch, provider-minute aggregation across flushes, separation of provider bytes and served bytes, and retry after a rolled-back telemetry transaction. Memory tests also cover weighted averages/peaks, period boundaries and rollback/reopening. They do not execute the C# service or React components.
 
 Node/npm and the .NET SDK are unavailable in the implementation environment. Compilation, EF query translation, the C# buffer integration checks and browser integration still need verification in a configured environment:
 
 ```sh
 # From the repository root (real store, temporary isolated archive)
 dotnet run --project tests/DashboardBuffer/DashboardBuffer.csproj
+dotnet run --project tests/ArticleMemory/ArticleMemory.csproj
 # From backend/
 dotnet build
 # From frontend/
@@ -133,3 +144,11 @@ The C# integration executable checks that collection/read operations do not comm
 Integration checks: verify the final flush on regular shutdown and the expected loss window on forced termination; restart the backend and verify that archive totals remain unchanged; clear original history after capture and verify archive totals remain; switch day/week/month across a year boundary and February; stop/restart collection and inspect graph gaps; test read-only/full storage; run the original application against the same config directory; check desktop/mobile navigation and date selection.
 
 `docs/mockups/usenet-dashboard.png` is the original illustrative mockup with sample data. It predates the saved-history controls and is not a running-app screenshot.
+
+The ArticleMemory executable covers pool capacity accounting, concurrent disposal and cap enforcement, partial-constructor cleanup, decoder/decorator disposal, real BODY/ARTICLE prefetch against a loopback NNTP fixture, unread-byte consumption and producer failure propagation. It has not been executed in this environment.
+
+## Dashboard section order
+
+Import queue/summary, Usenet overview, saved history, connection activity, connection pool, recent imports and library health are always visible. Use **Reorder sections** and the up/down buttons to change their order, then **Done**. Usenet has its own controls for live statistics, article memory, activity, providers, heatmap and current reads. Buttons work with keyboard and touch; **Reset order** restores defaults. Reordering retains mounted components and their live collection.
+
+Preferences are saved locally in the current browser, independently for the dashboard and Usenet sections. Unrecognized/duplicate saved entries are discarded and new sections are appended. If browser storage is unavailable, controls still work for the current page and report that the order could not be persisted.

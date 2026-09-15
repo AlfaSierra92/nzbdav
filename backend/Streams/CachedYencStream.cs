@@ -13,7 +13,7 @@ public class CachedYencStream : YencStream
     private readonly UsenetYencHeader _cachedHeaders;
     private readonly Stream _cachedDecodedStream;
 
-    public CachedYencStream(UsenetYencHeader cachedHeaders, Stream cachedDecodedStream) : base(Null)
+    public CachedYencStream(UsenetYencHeader cachedHeaders, Stream cachedDecodedStream) : base(Null, allocateBuffers: false)
     {
         _cachedHeaders = cachedHeaders ?? throw new ArgumentNullException(nameof(cachedHeaders));
         _cachedDecodedStream = cachedDecodedStream ?? throw new ArgumentNullException(nameof(cachedDecodedStream));

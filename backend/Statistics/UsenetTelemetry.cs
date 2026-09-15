@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
+using UsenetSharp.Diagnostics;
 
 namespace NzbWebDAV.Statistics;
 
@@ -46,7 +47,7 @@ public sealed class UsenetTelemetry
         var providers = _providers.Values.Select(provider => provider.Capture(elapsed)).Where(p => p.Configured || p.Articles + p.Bytes + p.Errors + p.Misses + p.Retries > 0).ToArray();
         var reads = _reads.Values.Select(read => read.Snapshot(elapsed)).ToArray();
         return new TelemetryFrame(DateTimeOffset.UtcNow.ToUnixTimeSeconds(), elapsed, providers, reads,
-            servedDelta, servedDelta / elapsed, hardDelta);
+            servedDelta, servedDelta / elapsed, hardDelta, ArticleMemory.Snapshot());
     }
     public sealed class ReadSession : IDisposable
     {
@@ -102,4 +103,4 @@ public record ProviderTick(string Id, string Name, bool Configured, long Article
 public record ActiveRead(string Id, string Name, string Client, string Address, long Position, long? Length,
     long SentBytes, double BytesPerSecond, Dictionary<string, long> Providers);
 public record TelemetryFrame(long Time, double ElapsedSeconds, ProviderTick[] Providers, ActiveRead[] Reads,
-    long ServedBytes, double ServedBytesPerSecond, long HardFailures);
+    long ServedBytes, double ServedBytesPerSecond, long HardFailures, ArticleMemorySnapshot ArticleMemory);
