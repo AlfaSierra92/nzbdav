@@ -1,5 +1,7 @@
 using Microsoft.Data.Sqlite;
 using NzbWebDAV.Statistics;
+using NzbWebDAV.Streams;
+using UsenetSharp.Streams;
 
 // Dependency-free integration checks against the real C# store. No application database is opened.
 var directory = Path.Combine(Path.GetTempPath(), "dashboard-buffer-" + Guid.NewGuid());
@@ -70,6 +72,35 @@ try
     var retried = await reopened.ReadAsync("day", date, ct);
     Assert(retried.PendingSamples == 0 && retried.Buckets[0].Samples == 16, "Retry must save every unique second");
     Assert(retried.Buckets[0].ConnectionSamples == 15, "Unknown connections must remain unknown");
+    // Exercise real counter concurrency and stream instrumentation without network access.
+    var provider = new ProviderTelemetry("test", "Test provider") { Configured = true };
+    Parallel.For(0, 1000, _ => { provider.Article(2); provider.Bytes(3); });
+    var counters = provider.Capture(1);
+    Assert(counters.Articles == 1000 && counters.Bytes == 3000 && counters.OkMilliseconds == 2000, "Concurrent counters must not lose events");
+    Assert(provider.Capture(1).Articles == 0, "Sampling must return deltas only");
+    var tracker = new UsenetTelemetry();
+    using (var activeRead = tracker.BeginRead("file", "client", "127.0.0.1", 100, 1000))
+    {
+        await using var tracked = new TelemetryYencStream(new FakeYencStream(), provider, activeRead);
+        var readCount = await tracked.ReadAsync(new byte[32].AsMemory());
+        activeRead.Sent(5);
+        var frame = tracker.Capture();
+        Assert(readCount == 8 && frame.Reads[0].Position == 105 && frame.ServedBytes == 5, "Decoded and served byte counts must be distinct");
+        Assert(frame.Reads[0].Providers["test"] == 8, "Reads must be attributed to their provider");
+    }
+    Assert(tracker.Capture().Reads.Length == 0, "Disposed requests must disappear");
+    provider.Capture(1);
+    await using (var cancelled = new TelemetryYencStream(new FakeYencStream(new OperationCanceledException()), provider, null))
+    {
+        try { await cancelled.ReadAsync(new byte[32].AsMemory()); } catch (OperationCanceledException) { }
+    }
+    Assert(provider.Capture(1).Errors == 0, "Client cancellation must not count as provider failure");
+    await using (var broken = new TelemetryYencStream(new FakeYencStream(new IOException("test")), provider, null))
+    {
+        for (var attempt=0; attempt<2; attempt++)
+            try { await broken.ReadAsync(new byte[32].AsMemory()); } catch (IOException) { }
+    }
+    Assert(provider.Capture(1).Errors == 1, "Stream failure must be counted once");
     Console.WriteLine("Dashboard buffer integration checks passed.");
 
     async Task<long> Version()
@@ -90,4 +121,10 @@ finally
 static void Assert(bool condition, string message)
 {
     if (!condition) throw new Exception(message);
+}
+
+sealed class FakeYencStream(Exception? error = null) : YencStream(Stream.Null)
+{
+    public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        => error is null ? ValueTask.FromResult(Math.Min(8, buffer.Length)) : ValueTask.FromException<int>(error);
 }

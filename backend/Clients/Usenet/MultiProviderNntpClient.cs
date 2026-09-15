@@ -1,4 +1,5 @@
 ﻿using System.Runtime.ExceptionServices;
+using NzbWebDAV.Statistics;
 using NzbWebDAV.Clients.Usenet.Models;
 using NzbWebDAV.Extensions;
 using NzbWebDAV.Models;
@@ -124,6 +125,7 @@ public class MultiProviderNntpClient(List<MultiConnectionNntpClient> providers) 
         CancellationToken cancellationToken
     ) where T : UsenetResponse
     {
+        var isFetch = typeof(T) == typeof(UsenetDecodedBodyResponse) || typeof(T) == typeof(UsenetDecodedArticleResponse);
         ExceptionDispatchInfo? lastException = null;
         var orderedProviders = GetOrderedProviders();
         for (var i = 0; i < orderedProviders.Count; i++)
@@ -146,6 +148,7 @@ public class MultiProviderNntpClient(List<MultiConnectionNntpClient> providers) 
                 if (!isLastProvider && result.ResponseType == UsenetResponseType.NoArticleWithThatMessageId)
                     continue;
 
+                if (isFetch && !result.Success) UsenetTelemetry.Shared.HardFailure();
                 return result;
             }
             catch (Exception e) when (!e.IsCancellationException())
@@ -154,6 +157,7 @@ public class MultiProviderNntpClient(List<MultiConnectionNntpClient> providers) 
             }
         }
 
+        if (isFetch) UsenetTelemetry.Shared.HardFailure();
         lastException?.Throw();
         throw new Exception("There are no usenet providers configured.");
     }

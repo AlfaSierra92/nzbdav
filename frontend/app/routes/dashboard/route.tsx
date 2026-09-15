@@ -3,6 +3,7 @@ import { Link, useNavigate, useRevalidator } from "react-router";
 import type { Route } from "./+types/route";
 import { backendClient } from "~/clients/backend-client.server";
 import "./dashboard.css";
+import { UsenetOverview } from "./usenet-overview";
 import { HistoricalStatistics } from "./historical-statistics";
 
 export function meta() { return [{ title: "Dashboard · Nzb DAV" }]; }
@@ -102,6 +103,8 @@ export default function Dashboard({ loaderData: { queue, history, health, statis
             <button className="dash-button" disabled={revalidator.state !== "idle"} onClick={() => void revalidator.revalidate()}>{revalidator.state === "idle" ? "↻ Refresh" : "Refreshing…"}</button>
         </header>
         {(!queue || !history || !health) && <div className="dash-warning" role="status">Some statistics are unavailable. Check your backend connection and refresh.</div>}
+        <UsenetOverview />
+        <details className="dash-additional"><summary>Import queue, library health & connection history</summary>
         <section className="dash-metrics" aria-label="Overview">
             <Metric label="Active connections" value={number(active)} caption={current ? `of ${current.max} available connections` : "Waiting for Usenet telemetry"} />
             <Metric label="In queue" value={number(liveQueue ?? queue?.noofslots)} caption="NZBs waiting or processing" />
@@ -134,6 +137,7 @@ export default function Dashboard({ loaderData: { queue, history, health, statis
                 <div className="dash-summary"><span>Checks recorded<b>{number(healthCount)}</b></span><span>Healthy<b>{health ? number(healthy) : "—"}</b></span><span>Failed recent imports<b>{history ? number(failed) : "—"}</b></span></div>
             </section>
         </div>
+        </details>
         <footer className="dash-footnote">Connections, queue and saved-history view refresh every second. Import and health data refresh every 15 seconds. Import statistics use the latest 100 history entries; imported size is NZB content size, not network traffic.</footer>
     </main>;
 }

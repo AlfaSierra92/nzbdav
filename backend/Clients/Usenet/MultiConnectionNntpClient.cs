@@ -1,4 +1,7 @@
 ﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics;
+using NzbWebDAV.Statistics;
+using NzbWebDAV.Streams;
 using NzbWebDAV.Clients.Usenet.Concurrency;
 using NzbWebDAV.Clients.Usenet.Connections;
 using NzbWebDAV.Clients.Usenet.Models;
@@ -27,7 +30,8 @@ public class MultiConnectionNntpClient(
     ConnectionPool<INntpClient> connectionPool,
     ProviderType type,
     ProviderCircuitBreaker circuitBreaker,
-    string providerName
+    string providerName,
+    ProviderTelemetry? telemetry = null
 ) : NntpClient
 {
     public ProviderType ProviderType { get; } = type;
@@ -149,6 +153,8 @@ public class MultiConnectionNntpClient(
         int retryCount = 1
     ) where T : UsenetResponse
     {
+        var isFetch = name is "BODY" or "ARTICLE";
+        var readSession = UsenetTelemetry.CurrentRead.Value;
         while (retryCount >= 0)
         {
             ConnectionLock<INntpClient>? connectionLock = null;
@@ -165,11 +171,13 @@ public class MultiConnectionNntpClient(
             catch (Exception e)
             {
                 circuitBreaker.RecordFailure();
+                if (isFetch) telemetry?.Error();
                 LogException(() => connectionLock?.Replace());
                 LogException(() => connectionLock?.Dispose());
                 if (retryCount > 0)
                 {
                     Log.Debug(e, "Error getting connection-lock for provider {Provider}. Retrying with a new connection.", providerName);
+                    if (isFetch) telemetry?.Retry();
                     retryCount--;
                     continue;
                 }
@@ -179,6 +187,7 @@ public class MultiConnectionNntpClient(
                 throw;
             }
 
+            var started = Stopwatch.GetTimestamp();
             T? result;
             try
             {
@@ -192,6 +201,7 @@ public class MultiConnectionNntpClient(
             }
             catch (Exception e) when (e.TryGetCausingException(out UsenetArticleNotFoundException _))
             {
+                if (isFetch) telemetry?.Miss();
                 LogException(() => connectionLock?.Dispose());
                 LogException(() => onConnectionReadyAgain?.Invoke(ArticleBodyResult.NotRetrieved));
                 throw;
@@ -199,11 +209,13 @@ public class MultiConnectionNntpClient(
             catch (Exception e)
             {
                 circuitBreaker.RecordFailure();
+                if (isFetch) telemetry?.Error();
                 LogException(() => connectionLock?.Replace());
                 LogException(() => connectionLock?.Dispose());
                 if (retryCount > 0)
                 {
                     Log.Debug(e, "Error executing nntp {Command} command for provider {Provider}. Retrying with a new connection.", name, providerName);
+                    if (isFetch) telemetry?.Retry();
                     retryCount--;
                     continue;
                 }
@@ -214,6 +226,21 @@ public class MultiConnectionNntpClient(
             }
 
             circuitBreaker.RecordSuccess();
+            if (isFetch && telemetry is not null)
+            {
+                if (result.Success)
+                {
+                    telemetry.Article(Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+                    // Records are immutable: preserve headers/status while decorating only the decoded stream.
+                    if (result is UsenetDecodedBodyResponse body)
+                        result = (T)(UsenetResponse)(body with { Stream = new TelemetryYencStream(body.Stream, telemetry, readSession) });
+                    else if (result is UsenetDecodedArticleResponse article)
+                        result = (T)(UsenetResponse)(article with { Stream = new TelemetryYencStream(article.Stream, telemetry, readSession) });
+                }
+                else if (result.ResponseType == UsenetResponseType.NoArticleWithThatMessageId) telemetry.Miss();
+                else telemetry.Error();
+            }
+
 
             // stat, head, and date
             if (name is "STAT" or "HEAD" or "DATE")

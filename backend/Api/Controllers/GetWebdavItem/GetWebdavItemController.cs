@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NWebDav.Server.Stores;
 using NzbWebDAV.Config;
+using NzbWebDAV.Statistics;
 using NzbWebDAV.Extensions;
 using NzbWebDAV.Par2Recovery;
 using NzbWebDAV.Utils;
@@ -20,6 +21,7 @@ public class GetWebdavItemController(DatabaseStore store, ConfigManager configMa
         if (item is null) throw new BadHttpRequestException("The file does not exist.");
         if (item is IStoreCollection) throw new BadHttpRequestException("The file does not exist.");
 
+        HttpContext.Items["telemetryFileName"] = item.Name;
         // disable compression to keep Content-Length intact for clients that need seeking
         Response.Headers["Content-Encoding"] = "identity";
 
@@ -70,7 +72,23 @@ public class GetWebdavItemController(DatabaseStore store, ConfigManager configMa
             HttpContext.Items["configManager"] = configManager;
             var request = new GetWebdavItemRequest(HttpContext);
             await using var response = await GetWebdavItem(request);
-            await response.CopyToAsync(Response.Body, bufferSize: 1024, HttpContext.RequestAborted);
+            var length = Response.Headers.ContentRange.ToString().Split('/').LastOrDefault();
+            using var read = UsenetTelemetry.Shared.BeginRead(HttpContext.Items["telemetryFileName"] as string ?? Path.GetFileName(request.Item), Request.Headers.UserAgent.ToString(),
+                HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown", request.RangeStart ?? 0,
+                long.TryParse(length, out var total) ? total : Response.ContentLength);
+            var previous = UsenetTelemetry.CurrentRead.Value;
+            UsenetTelemetry.CurrentRead.Value = read;
+            try
+            {
+                var buffer = new byte[64 * 1024];
+                int count;
+                while ((count = await response.ReadAsync(buffer.AsMemory(), HttpContext.RequestAborted)) > 0)
+                {
+                    await Response.Body.WriteAsync(buffer.AsMemory(0, count), HttpContext.RequestAborted);
+                    read.Sent(count);
+                }
+            }
+            finally { UsenetTelemetry.CurrentRead.Value = previous; }
         }
         catch (UnauthorizedAccessException)
         {

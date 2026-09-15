@@ -32,6 +32,7 @@ public sealed class DashboardStatisticsService(DashboardStatisticsStore store, W
                         checkpoint = await store.GetCheckpointAsync(stoppingToken);
                         initialized = true;
                     }
+                    await store.CaptureTelemetryAsync(stoppingToken);
                     var now = DateTimeOffset.UtcNow;
                     // Advance the scan checkpoint in memory; the durable checkpoint moves only on flush.
                     var since = checkpoint.HasValue ? DateTimeOffset.FromUnixTimeSeconds(checkpoint.Value).AddDays(-1) : DateTimeOffset.MinValue;

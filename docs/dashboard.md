@@ -1,6 +1,6 @@
 # Dashboard
 
-`/dashboard` is the default landing page. It includes a live overview and a separate **Statistics history** section.
+`/dashboard` is the default landing page. It includes a Usenet traffic overview based on real instrumentation, plus expandable import, health and connection history.
 
 ## Persistent history
 
@@ -19,7 +19,7 @@ CONFIG_PATH/
 
 All archive updates use a single transaction per batch: all buffered second samples, newly observed imports, health checks and the durable collection checkpoint commit together. Import/check IDs prevent duplicates during retries, restarts and overlap scans. An interrupted transaction rolls back. Disk or database failures are logged and retried without stopping the application; failed batches remain in memory and the dashboard indicates delayed collection or persistence. Corrupt files are not automatically replaced.
 
-The archive contains counters, timestamps and record IDs; no filenames, provider credentials or NZB content. Data is retained without automatic expiry. File size will grow over time (up to 86,400 connection/queue samples per day plus one row per import/check). For a file-copy backup, stop the backend and copy the entire `dashboard` directory; do not copy only the SQLite main file while it is running in WAL mode.
+The archive contains counters, timestamps, record IDs, provider endpoint labels and opaque provider IDs; no filenames, client addresses, provider credentials or NZB content. Data is retained without automatic expiry. File size will grow over time (up to 86,400 connection/queue samples per day plus one row per import/check). For a file-copy backup, stop the backend and copy the entire `dashboard` directory; do not copy only the SQLite main file while it is running in WAL mode.
 
 ## Reduced disk writes
 
@@ -69,6 +69,42 @@ Imported size is NZB content size, **not network traffic**. Health percentage de
 - Live connection chart: existing `cxs` WebSocket state, sampled every second (120 points) for the last two minutes of the browser session. This remains separate from the durable second samples.
 - Connections, queue count and the archive view refresh every second while visible. The archive uses a dedicated background request with no overlapping requests, a timeout, and cancellation on navigation/unmount; it does not reload the page. Recent import history and the health overview refresh every 15 seconds. The top overview still uses the latest 100 import records and the existing 30-day health summary; selected-period values are in **Statistics history**.
 
+## Usenet traffic overview
+
+The top dashboard section implements the reference statistics using new runtime measurements. It has **1h / 24h / 7d / 30d / All** ranges, a traffic chart, provider table, activity heatmap and live request cards. Calendar day/week/month views remain available under **Import queue, library health & connection history**. These counters start when this instrumentation is enabled; old queue/import records cannot reconstruct network activity.
+
+### Metric definitions
+
+| Metric | Measurement |
+| --- | --- |
+| Active reads | GET transfers currently copying a WebDAV file or `/view` response to a client. HEAD, 304 and rejected WebDAV requests are excluded. These are in-flight requests, not a count of NNTP connections. |
+| Articles/s | Successful BODY/ARTICLE responses accepted by the provider client divided by actual elapsed monotonic sampling time. A later decoding/stream error can still occur. The sub-caption counts accepted responses in the last 60 seconds. |
+| Read throughput / provider Read | Decoded bytes returned by provider-backed Yenc streams, excluding encoded NNTP overhead and bytes read from the disk article cache. This is consumption of decoded data, not a TCP bandwidth measurement. |
+| Served | Bytes successfully written to WebDAV or `/view` HTTP response bodies, including range requests. This can differ from provider bytes due to caching, seeks, read-ahead, partial requests and non-Usenet files. |
+| Misses | BODY/ARTICLE attempts returning “no article” or throwing the existing article-not-found exception on a provider, even when another provider succeeds. |
+| Provider errors | Non-cancellation failed connection/command attempts and non-cancellation failures while reading a decoded stream. Stream failures are counted once per stream. |
+| Fetch errors / Activity errors | Requests exhausting the provider fallback chain (including not-found outcomes), plus terminal decoded-stream failures. The KPI counts the last 60 seconds; the chart total uses the selected period. Successful fallback is not a terminal error. |
+| Retries | Additional attempts against the same provider; switching to a backup provider is not included in this column. |
+| Avg OK ms | Mean successful BODY/ARTICLE response latency after acquiring the connection, excluding pool wait and later body consumption. It is not total article download duration. |
+| Outages | Sampled elapsed time while the provider circuit breaker is open. Short outages between samples may not be observed. |
+| Share | Provider decoded bytes divided by all providers' decoded bytes in the selected range. |
+| Article RAM / cap | **Unavailable (`null`, displayed as “—”)**: this version of UsenetSharp exposes neither retained article buffer bytes nor a global byte cap. `usenet.article-buffer-size` is a per-stream article-count setting, not a byte limit. Process/GC memory is deliberately not substituted for article RAM. |
+
+Live read cards show the filename, user agent (Plex/Jellyfin when identifiable), connection peer address, range-adjusted byte offset, total file size where known, client throughput, and decoded bytes attributed to each provider using an `AsyncLocal` request context. The connection peer can be the frontend/reverse proxy, not necessarily the original client IP. Client/session details exist only in RAM and are not archived. Disposal removes the request; failures and cancellations pass through the existing transfer flow.
+
+Provider identity is a truncated SHA-256 digest of host, port, SSL mode and username. Passwords are excluded. Visible labels use host/port plus an opaque suffix to distinguish accounts; usernames are not exposed. Configuration reloads reuse counters for the same identity and retain already-recorded statistics for removed providers.
+
+### Collection and storage
+
+- `UsenetTelemetry` / `ProviderTelemetry`: in-memory counters with atomic hot-path updates; sampled by the existing one-second collector.
+- `MultiConnectionNntpClient`: provider outcomes, retries, response timing and decoded-stream decoration. `MultiProviderNntpClient`: terminal outcomes after fallback.
+- `TelemetryYencStream`: delegates decoding/header access/disposal to the original stream, measures returned bytes, and excludes cancellation from failure counters.
+- `GetAndHeadHandlerPatch` / `GetWebdavItemController`: active transfers and bytes successfully sent to clients.
+- `telemetry_minutes` is an **additional table only in the separate dashboard archive**. Second-level counter deltas are accumulated into per-provider minute totals in RAM. This adds at most one row per observed provider per minute plus a global served/error row, rather than another row per provider per second. Partial minute batches merge transactionally; sums, weighted latency inputs and peak sampled throughput are preserved.
+- The existing 15-minute flush, empty-buffer handling, retry retention and shutdown flush also cover these rows. Pending aggregates are cleared only after the same transaction commits. No change to the application database or its migrations.
+- `/api/usenet-statistics?range=24h` uses the existing API-key authentication. It merges cached archive aggregates with pending memory counters. UI refresh runs once per second while visible, without overlapping requests, and aborts on navigation/timeout. Persisted query results are cached per range/minute and invalidated after flush.
+- The 1h/24h chart uses minute buckets; 7d/30d uses hourly buckets expressed as articles/minute; All uses daily buckets. The heatmap uses hours (days for All). Missing observed periods are not backfilled. Rates are sampled, so events between ticks are included in the next delta, but short-lived sessions can start and finish between UI updates.
+
 ## Validation
 
 Executed:
@@ -77,7 +113,7 @@ Executed:
 python3 -m unittest discover -s tests -v
 ```
 
-Nine tests exercise the actual SQL extracted from the store: file reopening, idempotent replay, transaction rollback, period boundaries, missing versus zero connection telemetry, import/health aggregation, 15 minute samples committed together, replays that do not rewrite stored values, and 900 distinct second samples saved in one batch. They do not execute the C# service or React components.
+Twelve tests exercise the actual SQL extracted from the store: file reopening, idempotent replay, transaction rollback, period boundaries, missing versus zero connection telemetry, import/health aggregation, 15 minute samples committed together, replays that do not rewrite stored values, and 900 distinct second samples saved in one batch, provider-minute aggregation across flushes, separation of provider bytes and served bytes, and retry after a rolled-back telemetry transaction. They do not execute the C# service or React components.
 
 Node/npm and the .NET SDK are unavailable in the implementation environment. Compilation, EF query translation, the C# buffer integration checks and browser integration still need verification in a configured environment:
 
@@ -92,7 +128,7 @@ npm run typecheck
 npm run build
 ```
 
-The C# integration executable checks that collection/read operations do not commit, pending second samples remain visible, cached reads do not double-count samples or confuse week/month ranges with the same start, empty flushes do not write, aggregates survive flush and restart, and a forced transaction failure retains the buffer for retry. It has been added but not executed in this environment.
+The C# integration executable checks that collection/read operations do not commit, pending second samples remain visible, cached reads do not double-count samples or confuse week/month ranges with the same start, empty flushes do not write, aggregates survive flush and restart, and a forced transaction failure retains the buffer for retry. It additionally exercises concurrent provider counters, stream byte attribution, active request disposal, cancellation exclusion and single-count stream failures. It has been added but not executed in this environment.
 
 Integration checks: verify the final flush on regular shutdown and the expected loss window on forced termination; restart the backend and verify that archive totals remain unchanged; clear original history after capture and verify archive totals remain; switch day/week/month across a year boundary and February; stop/restart collection and inspect graph gaps; test read-only/full storage; run the original application against the same config directory; check desktop/mobile navigation and date selection.
 

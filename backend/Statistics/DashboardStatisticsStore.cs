@@ -4,7 +4,7 @@ using NzbWebDAV.Database;
 namespace NzbWebDAV.Statistics;
 
 // Completely independent of DavDatabaseContext and its migrations.
-public sealed class DashboardStatisticsStore
+public sealed partial class DashboardStatisticsStore
 {
     public static string FilePath => Path.Join(DavDatabaseContext.ConfigPath, "dashboard", "statistics-v1.sqlite");
     public string? LastError { get; set; }
@@ -20,7 +20,7 @@ public sealed class DashboardStatisticsStore
     public int FlushIntervalSeconds { get; } = int.TryParse(
         Environment.GetEnvironmentVariable("DASHBOARD_STATS_FLUSH_SECONDS"), out var seconds)
         ? Math.Clamp(seconds, 60, 86400) : 900;
-    public bool BufferLimitReached => _samples.Count + _imports.Count + _checks.Count >= 10000;
+    public bool BufferLimitReached => _samples.Count + _imports.Count + _checks.Count + _telemetry.Count >= 10000;
 
     public async Task<SqliteConnection> OpenAsync(CancellationToken ct, bool readOnly = false)
     {
@@ -49,6 +49,11 @@ public sealed class DashboardStatisticsStore
             CREATE TABLE IF NOT EXISTS health (
                 id TEXT PRIMARY KEY, time INTEGER NOT NULL, healthy INTEGER NOT NULL);
             CREATE INDEX IF NOT EXISTS health_time ON health(time);
+            CREATE TABLE IF NOT EXISTS telemetry_minutes (
+                time INTEGER NOT NULL, provider TEXT NOT NULL, name TEXT NOT NULL,
+                articles INTEGER NOT NULL, bytes INTEGER NOT NULL, misses INTEGER NOT NULL, errors INTEGER NOT NULL,
+                retries INTEGER NOT NULL, ok_ms REAL NOT NULL, outage_seconds REAL NOT NULL, observed_seconds REAL NOT NULL,
+                served_bytes INTEGER NOT NULL, peak_bps REAL NOT NULL, hard_failures INTEGER NOT NULL, PRIMARY KEY(time,provider));
             CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value INTEGER NOT NULL);
             """;
         await command.ExecuteNonQueryAsync(ct);
@@ -113,7 +118,7 @@ public sealed class DashboardStatisticsStore
         await _gate.WaitAsync(ct);
         try
         {
-            if (_samples.Count == 0 && _imports.Count == 0 && _checks.Count == 0) return;
+            if (_samples.Count == 0 && _imports.Count == 0 && _checks.Count == 0 && _telemetry.Count == 0) return;
             await using var connection = await OpenAsync(ct);
             using var transaction = connection.BeginTransaction();
             foreach (var sample in _samples.Values)
@@ -126,8 +131,11 @@ public sealed class DashboardStatisticsStore
             foreach (var item in _checks.Values)
                 await Execute("INSERT OR IGNORE INTO health VALUES ($id, $time, $healthy)",
                     ("$id", item.Id), ("$time", item.Time), ("$healthy", item.Healthy ? 1 : 0));
-            await Execute("INSERT INTO metadata VALUES ('lastCapture', $time) ON CONFLICT(key) DO UPDATE SET value = excluded.value WHERE metadata.value < excluded.value", ("$time", _lastCapture));
+            if (_lastCapture is not null) await Execute("INSERT INTO metadata VALUES ('lastCapture', $time) ON CONFLICT(key) DO UPDATE SET value = excluded.value WHERE metadata.value < excluded.value", ("$time", _lastCapture));
+            await FlushTelemetryAsync(connection, transaction, ct);
             transaction.Commit();
+            _telemetry.Clear();
+            _telemetryCache.Clear();
             _lastSaved = _lastCapture;
             _diskCache.Clear();
             // Clear only after a successful commit; failures leave the complete batch available for retry.

@@ -1,5 +1,7 @@
 ﻿using NzbWebDAV.Clients.Usenet.Connections;
 using NzbWebDAV.Config;
+using NzbWebDAV.Statistics;
+using NzbWebDAV.Models;
 using NzbWebDAV.Websocket;
 
 namespace NzbWebDAV.Clients.Usenet;
@@ -38,6 +40,7 @@ public class UsenetStreamingClient : WrappingNntpClient
     )
     {
         var providerConfig = configManager.GetUsenetProviderConfig();
+        UsenetTelemetry.Shared.ResetConfigured();
         var connectionPoolStats = new ConnectionPoolStats(providerConfig, websocketManager);
         var providerClients = providerConfig.Providers
             .Select((provider, index) => CreateProviderClient(
@@ -60,7 +63,10 @@ public class UsenetStreamingClient : WrappingNntpClient
             onConnectionPoolChanged
         );
         var circuitBreaker = new ProviderCircuitBreaker(connectionDetails.Host);
-        return new MultiConnectionNntpClient(connectionPool, connectionDetails.Type, circuitBreaker, connectionDetails.Host);
+        var telemetry = UsenetTelemetry.Shared.Register(connectionDetails.Host, connectionDetails.Port,
+            connectionDetails.UseSsl, connectionDetails.User, () => circuitBreaker.IsTripped,
+            connectionDetails.Type != ProviderType.Disabled);
+        return new MultiConnectionNntpClient(connectionPool, connectionDetails.Type, circuitBreaker, connectionDetails.Host, telemetry);
     }
 
     private static ConnectionPool<INntpClient> CreateNewConnectionPool

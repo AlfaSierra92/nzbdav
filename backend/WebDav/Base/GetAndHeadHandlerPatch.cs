@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Http;
+using NzbWebDAV.Statistics;
 using NWebDav.Server;
 using NWebDav.Server.Handlers;
 using NWebDav.Server.Helpers;
@@ -150,7 +151,15 @@ public class GetAndHeadHandlerPatch : IRequestHandler
 
                 // HEAD method doesn't require the actual item data
                 if (!isHeadRequest)
-                    await CopyToAsync(stream, response.Body, range?.Start ?? 0, range?.End, httpContext.RequestAborted).ConfigureAwait(false);
+                {
+                    using var read = UsenetTelemetry.Shared.BeginRead(entry.Name, request.Headers.UserAgent.ToString(),
+                        httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown", range?.Start ?? 0,
+                        stream.CanSeek ? stream.Length : null);
+                    var previous = UsenetTelemetry.CurrentRead.Value;
+                    UsenetTelemetry.CurrentRead.Value = read;
+                    try { await CopyToAsync(stream, response.Body, range?.Start ?? 0, range?.End, httpContext.RequestAborted).ConfigureAwait(false); }
+                    finally { UsenetTelemetry.CurrentRead.Value = previous; }
+                }
             }
             else
             {
@@ -194,6 +203,7 @@ public class GetAndHeadHandlerPatch : IRequestHandler
             await dest.WriteAsync(buffer, 0, bytesRead, cancellationToken).ConfigureAwait(false);
 
             // Decrement the number of bytes left to read
+            UsenetTelemetry.CurrentRead.Value?.Sent(bytesRead);
             bytesToRead -= bytesRead;
         }
     }

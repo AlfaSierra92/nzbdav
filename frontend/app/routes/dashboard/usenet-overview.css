@@ -1,0 +1,47 @@
+.usenet-overview { margin: 6px 0 28px; }
+.usenet-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+.usenet-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 18px; }
+.usenet-main { display: grid; gap: 18px; min-width: 0; }
+.usenet-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); padding: 0; }
+.usenet-kpis > div { padding: 22px 18px; border-right: 1px dashed #293746; min-width: 0; }
+.usenet-kpis > div:last-child { border: 0; }
+.usenet-kpis span { color: #96a8b8; font-size: 12px; display: block; }
+.usenet-kpis strong { font-size: clamp(19px, 1.7vw, 30px); font-weight: 600; display: block; margin: 10px 0 5px; font-variant-numeric: tabular-nums; }
+.usenet-kpis > div:first-child strong { color: #43dabd; }
+.usenet-kpis small { font-size: 10px; color: #96a8b8; display: block; line-height: 1.5; }
+.usenet-totals { display: flex; gap: 22px; flex-wrap: wrap; }
+.usenet-totals span { text-align: right; }
+.usenet-totals small { font-size: 10px; color: #96a8b8; display: block; }
+.usenet-totals strong { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.usenet-totals span:nth-child(3) strong { color: #fb7185; }
+.usenet-chart { display: flex; gap: 10px; margin: 22px 0 12px; }
+.usenet-chart > svg { flex: 1; width: 0; min-height: 160px; }
+.usenet-y { display: flex; flex-direction: column; justify-content: space-between; color: #96a8b8; font-size: 10px; padding: 15px 0; min-width: 38px; }
+.usenet-provider-table { overflow-x: auto; }
+.usenet-provider-table table { border-collapse: collapse; width: 100%; font-size: 11px; white-space: nowrap; }
+.usenet-provider-table :is(th,td) { padding: 14px 10px; border-bottom: 1px solid #24333e; text-align: left; font-variant-numeric: tabular-nums; }
+.usenet-provider-table th { font-weight: 500; color: #a8b8c6; }
+.usenet-provider-table td { color: #d5dee6; }
+.usenet-provider-table tbody th small { display: block; padding-left: 14px; font-size: 9px; color: #96a8b8; }
+.usenet-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #43dabd; margin-right: 8px; vertical-align: middle; }
+.usenet-dot.bad { background: #fb7185; }
+.usenet-spark { width: 85px; height: 25px; display: block; }
+.usenet-share { width: 72px; height: 17px; background: #0b151e; position: relative; text-align: center; }
+.usenet-share span { position: absolute; inset: 0 auto 0 0; background: #245758; }
+.usenet-share b { position: relative; font-weight: 500; font-size: 10px; }
+.usenet-now { align-self: stretch; }
+.usenet-read { border: 1px solid #2a3946; border-radius: 12px; padding: 15px; background: #101a26; margin-bottom: 12px; }
+.usenet-read h3 { font-size: 13px; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 7px; }
+.usenet-read p { font-size: 10px; overflow-wrap: anywhere; }
+.usenet-read > small { display: block; font-family: monospace; margin: 14px 0 8px; color: #96a8b8; }
+.usenet-read progress { width: 100%; height: 5px; accent-color: #43dabd; display: block; margin: 10px 0; }
+.usenet-read-size { display: flex; gap: 8px; justify-content: space-between; font-family: monospace; font-size: 10px; color: #a8b8c6; flex-wrap: wrap; }
+.usenet-read-providers { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.usenet-read-providers span { color: #73e0e7; background: #173d4e; font-size: 9px; padding: 4px 7px; border-radius: 5px; overflow-wrap: anywhere; }
+.usenet-heatmap { display: grid; grid-template-columns: repeat(auto-fill,minmax(20px,1fr)); gap: 3px; }
+.usenet-heatmap span { height: 24px; border-radius: 3px; }
+.usenet-heatmap span:focus-visible { outline: 2px solid #63dfc0; }
+.dashboard .usenet-note { font-size: 10px; color: #96a8b8; line-height: 1.7; margin-top: 14px; }
+.dash-additional > summary { cursor: pointer; color: #63dfc0; padding: 16px 0; margin-bottom: 12px; }
+@media (max-width: 1550px) { .usenet-layout { grid-template-columns: minmax(0,1fr); } .usenet-now { display: grid; grid-template-columns: repeat(auto-fit,minmax(230px,1fr)); gap: 12px; } .usenet-now > .usenet-heading, .usenet-now > .usenet-note { grid-column: 1/-1; } }
+@media (max-width: 700px) { .usenet-kpis { grid-template-columns: repeat(2,minmax(0,1fr)); } .usenet-kpis > div { border-bottom: 1px dashed #293746; } .usenet-kpis > div:last-child { grid-column: 1/-1; } .usenet-totals { gap: 16px; } .usenet-totals span { text-align: left; } }
