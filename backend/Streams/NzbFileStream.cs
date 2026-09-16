@@ -1,7 +1,7 @@
 ﻿using NzbWebDAV.Clients.Usenet;
-using NzbWebDAV.Extensions;
 using NzbWebDAV.Models;
 using NzbWebDAV.Utils;
+using Serilog;
 using UsenetSharp.Streams;
 
 namespace NzbWebDAV.Streams;
@@ -33,11 +33,30 @@ public class NzbFileStream(
 
     public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
     {
-        if (_position >= fileSize) return 0;
-        _innerStream ??= await GetFileStream(_position, cancellationToken).ConfigureAwait(false);
-        var read = await _innerStream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
-        _position += read;
-        return read;
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (buffer.IsEmpty || _position >= fileSize) return 0;
+        for (var retry = 0; ; retry++)
+        {
+            try
+            {
+                _innerStream ??= await GetFileStream(_position, cancellationToken).ConfigureAwait(false);
+                var read = await _innerStream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
+                _position += read;
+                return read;
+            }
+            catch (TimeoutException) when (!cancellationToken.IsCancellationRequested)
+            {
+                // A failed read may have consumed decoder bytes, but none were handed to
+                // the caller. Reopen at the last successfully delivered file position.
+                var failedStream = _innerStream;
+                _innerStream = null;
+                if (failedStream != null) await failedStream.DisposeAsync().ConfigureAwait(false);
+                if (retry >= 2) throw;
+                Log.Warning("NNTP read timed out at file byte {Position}. Retrying ({Retry}/2).", _position, retry + 1);
+                await Task.Delay(TimeSpan.FromMilliseconds(250 * (retry + 1)), cancellationToken).ConfigureAwait(false);
+            }
+        }
     }
 
     public override long Seek(long offset, SeekOrigin origin)
@@ -72,9 +91,25 @@ public class NzbFileStream(
         if (rangeStart == 0) return GetMultiSegmentStream(0, cancellationToken);
         var foundSegment = await SeekSegment(rangeStart, cancellationToken).ConfigureAwait(false);
         var stream = GetMultiSegmentStream(foundSegment.FoundIndex, cancellationToken);
-        await stream.DiscardBytesAsync(rangeStart - foundSegment.FoundByteRange.StartInclusive, cancellationToken)
-            .ConfigureAwait(false);
-        return stream;
+        try
+        {
+            // Do not silently accept EOF while positioning a replacement stream.
+            var remaining = rangeStart - foundSegment.FoundByteRange.StartInclusive;
+            var scratch = new byte[1024];
+            while (remaining > 0)
+            {
+                var read = await stream.ReadAsync(scratch.AsMemory(0, (int)Math.Min(remaining, scratch.Length)), cancellationToken)
+                    .ConfigureAwait(false);
+                if (read == 0) throw new EndOfStreamException("Unexpected EOF while seeking within an NNTP segment.");
+                remaining -= read;
+            }
+            return stream;
+        }
+        catch
+        {
+            await stream.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
     }
 
     private Stream GetMultiSegmentStream(int firstSegmentIndex, CancellationToken cancellationToken)

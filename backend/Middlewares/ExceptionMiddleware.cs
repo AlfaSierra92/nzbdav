@@ -24,6 +24,7 @@ public class ExceptionMiddleware(RequestDelegate next)
                 context.Response.StatusCode = 499; // Non-standard status code for client closed request
                 await context.Response.WriteAsync("Client closed request.").ConfigureAwait(false);
             }
+            else context.Abort();
         }
         catch (UsenetArticleNotFoundException e)
         {
@@ -32,6 +33,7 @@ public class ExceptionMiddleware(RequestDelegate next)
                 context.Response.Clear();
                 context.Response.StatusCode = 404;
             }
+            else context.Abort();
 
             var filePath = GetRequestFilePath(context);
             Log.Error($"File `{filePath}` has missing articles: {e.Message}");
@@ -43,6 +45,7 @@ public class ExceptionMiddleware(RequestDelegate next)
                 context.Response.Clear();
                 context.Response.StatusCode = 404;
             }
+            else context.Abort();
 
             var filePath = GetRequestFilePath(context);
             var seekPosition = context.Request.GetRange()?.Start?.ToString() ?? "unknown";
@@ -55,6 +58,7 @@ public class ExceptionMiddleware(RequestDelegate next)
                 context.Response.Clear();
                 context.Response.StatusCode = 500;
             }
+            else context.Abort();
 
             var filePath = GetRequestFilePath(context);
             var seekPosition = context.Request.GetRange()?.Start?.ToString() ?? "0";

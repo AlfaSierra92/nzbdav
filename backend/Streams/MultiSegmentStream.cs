@@ -59,9 +59,14 @@ public class MultiSegmentStream : FastReadOnlyNonSeekableStream
 
                 // if we never get a chance to write the stream to the writer
                 // then make sure the stream gets disposed.
-                _ = Task.Run(async () => await (await streamTask).DisposeAsync(), CancellationToken.None);
+                _ = DisposeStreamTask(streamTask);
                 break;
             }
+        }
+        catch (Exception e)
+        {
+            // Surface producer failures to the reader instead of reporting clean EOF.
+            _streamTasks.Writer.TryComplete(e);
         }
         finally
         {
@@ -127,8 +132,14 @@ public class MultiSegmentStream : FastReadOnlyNonSeekableStream
 
         // ensure that streams that were never read from the channel get disposed
         while (_streamTasks.Reader.TryRead(out var streamTask))
-            _ = Task.Run(async () => await (await streamTask).DisposeAsync(), CancellationToken.None);
+            _ = DisposeStreamTask(streamTask);
 
         base.Dispose();
+    }
+
+    private static async Task DisposeStreamTask(Task<Stream> streamTask)
+    {
+        try { await (await streamTask.ConfigureAwait(false)).DisposeAsync().ConfigureAwait(false); }
+        catch { /* Observe failures from abandoned prefetch tasks during cleanup. */ }
     }
 }
