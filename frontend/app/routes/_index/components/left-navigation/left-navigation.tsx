@@ -36,18 +36,18 @@ export function LeftNavigation({ version, isFrontendAuthDisabled }: LeftNavigati
 
             <div className={styles.footer}>
                 <div className={styles["footer-item"]}>
-                    <Link to="https://github.com/nzbdav-dev/nzbdav" className={styles["github-link"]}>
+                    <Link to="https://github.com/AlfaSierra92/nzbdav" className={styles["github-link"]}>
                         github
                     </Link>
                     <div className={styles["github-icon"]} />
                 </div>
                 <div className={styles["footer-item"]}>
-                    <Link to="https://github.com/nzbdav-dev/nzbdav/releases" className={styles["github-link"]}>
+                    <Link to="https://github.com/AlfaSierra92/nzbdav/releases" className={styles["github-link"]}>
                         changelog
                     </Link>
                 </div>
                 <div className={styles["footer-item"]}>
-                    version: {version || 'unknown'}
+                    version: {version || '0.7.0'}
                 </div>
                 {!isFrontendAuthDisabled && <>
                     <hr />
