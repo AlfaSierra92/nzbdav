@@ -1,5 +1,6 @@
 using NzbWebDAV.Extensions;
 using NzbWebDAV.Statistics;
+using Serilog;
 using UsenetSharp.Models;
 using UsenetSharp.Streams;
 
@@ -14,11 +15,16 @@ public sealed class TelemetryYencStream(YencStream inner, ProviderTelemetry tele
     public override async ValueTask<UsenetYencHeader?> GetYencHeadersAsync(CancellationToken cancellationToken = default)
     {
         try { return await inner.GetYencHeadersAsync(cancellationToken).ConfigureAwait(false); }
-        catch (Exception error) when (!error.IsCancellationException()) { RecordFailure(); throw; }
+        catch (Exception error) when (!error.IsCancellationException()) { RecordFailure(error); throw; }
     }
-    private void RecordFailure()
+    private void RecordFailure(Exception error)
     {
-        if (Interlocked.Exchange(ref _failed, 1) == 0) { telemetry.Error(); UsenetTelemetry.Shared.HardFailure(); }
+        if (Interlocked.Exchange(ref _failed, 1) == 0)
+        {
+            telemetry.Error();
+            UsenetTelemetry.Shared.HardFailure();
+            Log.Warning(error, "Error reading NNTP article stream for provider {Provider}", telemetry.Name);
+        }
     }
     public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
     {
@@ -30,7 +36,7 @@ public sealed class TelemetryYencStream(YencStream inner, ProviderTelemetry tele
         }
         catch (Exception error) when (!error.IsCancellationException())
         {
-            RecordFailure();
+            RecordFailure(error);
             throw;
         }
     }

@@ -176,7 +176,7 @@ public class MultiConnectionNntpClient(
                 LogException(() => connectionLock?.Dispose());
                 if (retryCount > 0)
                 {
-                    Log.Debug(e, "Error getting connection-lock for provider {Provider}. Retrying with a new connection.", providerName);
+                    Log.Warning(e, "Error getting connection-lock for provider {Provider}. Retrying with a new connection.", providerName);
                     if (isFetch) telemetry?.Retry();
                     retryCount--;
                     continue;
@@ -214,7 +214,7 @@ public class MultiConnectionNntpClient(
                 LogException(() => connectionLock?.Dispose());
                 if (retryCount > 0)
                 {
-                    Log.Debug(e, "Error executing nntp {Command} command for provider {Provider}. Retrying with a new connection.", name, providerName);
+                    Log.Warning(e, "Error executing nntp {Command} command for provider {Provider}. Retrying with a new connection.", name, providerName);
                     if (isFetch) telemetry?.Retry();
                     retryCount--;
                     continue;
@@ -238,7 +238,12 @@ public class MultiConnectionNntpClient(
                         result = (T)(UsenetResponse)(article with { Stream = new TelemetryYencStream(article.Stream, telemetry, readSession) });
                 }
                 else if (result.ResponseType == UsenetResponseType.NoArticleWithThatMessageId) telemetry.Miss();
-                else telemetry.Error();
+                else
+                {
+                    telemetry.Error();
+                    Log.Warning("NNTP {Command} failed for provider {Provider}: {ResponseCode} {ResponseMessage}",
+                        name, providerName, result.ResponseCode, result.ResponseMessage);
+                }
             }
 
 
