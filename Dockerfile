@@ -1,18 +1,19 @@
-# syntax=docker/dockerfile:1.4
+# syntax=docker/dockerfile:1
 
 # -------- Stage 1: Build frontend --------
-FROM --platform=$BUILDPLATFORM node:alpine AS frontend-build
+FROM --platform=$BUILDPLATFORM node:24-alpine3.23 AS frontend-build
 
 WORKDIR /frontend
 COPY ./frontend ./
 
-RUN npm install
+RUN apk upgrade --no-cache
+RUN npm ci
 RUN npm run build
 RUN npm run build:server
 RUN npm prune --omit=dev
 
 # -------- Stage 2: Build backend --------
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS backend-build
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0-alpine3.23 AS backend-build
 
 WORKDIR /backend
 COPY ./backend ./
@@ -22,8 +23,11 @@ ARG TARGETARCH
 RUN dotnet restore
 RUN dotnet publish -c Release -r linux-musl-${TARGETARCH} -o ./publish
 
+# Use the target architecture for the runtime binary in multi-platform builds.
+FROM node:24-alpine3.23 AS node-runtime
+
 # -------- Stage 3: Combined runtime image --------
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine3.23
 
 # Label the image
 ARG REPO_URL
@@ -32,7 +36,10 @@ LABEL org.opencontainers.image.source=${REPO_URL}
 # Prepare environment
 WORKDIR /app
 RUN mkdir /config \
-    && apk add --no-cache nodejs npm libc6-compat shadow su-exec bash curl tzdata
+    && apk upgrade --no-cache \
+    && apk add --no-cache libstdc++ gcompat shadow su-exec bash curl tzdata
+COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
+RUN node --version
 
 # Copy frontend
 COPY --from=frontend-build /frontend/node_modules ./frontend/node_modules

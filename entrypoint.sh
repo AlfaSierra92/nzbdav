@@ -129,7 +129,7 @@ done
 
 # Run frontend as "$USER_NAME" in background
 cd /app/frontend
-su-exec "$USER_NAME" npm run start &
+su-exec "$USER_NAME" node dist-node/server.js &
 FRONTEND_PID=$!
 
 # Wait for either to exit
