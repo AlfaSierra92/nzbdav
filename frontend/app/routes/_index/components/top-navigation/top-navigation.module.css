@@ -19,7 +19,7 @@
 }
 
 .title {
-    color: white;
+    color: var(--accent-color);
     font-size: 1.5em;
     font-style: normal;
     font-weight: bold;

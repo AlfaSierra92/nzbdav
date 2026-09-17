@@ -1,9 +1,9 @@
 import { Children, isValidElement, useEffect, useState, type ReactNode } from "react";
 
-type Props = { storageKey: string; labels: Record<string, string>; children: ReactNode };
+type Props = { storageKey: string; labels: Record<string, string>; children: ReactNode; heading?: ReactNode; sidebar?: ReactNode; note?: ReactNode };
 
 /** Reorders mounted sections without resetting their polling or local controls. */
-export function SectionOrder({ storageKey, labels, children }: Props) {
+export function SectionOrder({ storageKey, labels, children, heading, sidebar, note }: Props) {
     const sections = Children.toArray(children).filter(isValidElement);
     const defaults = Object.keys(labels);
     const [order, setOrder] = useState<string[]>(defaults);
@@ -32,9 +32,16 @@ export function SectionOrder({ storageKey, labels, children }: Props) {
     return <div className="dash-section-order">
         <div className="dash-order-toolbar"><button type="button" className="dash-button" aria-expanded={editing} onClick={() => setEditing(!editing)}>{editing ? "Done" : "Reorder sections"}</button>{editing && <><span>Use the arrows to change order. Saved in this browser.</span><button type="button" className="dash-button" onClick={() => save(defaults, "Default order restored.")}>Reset order</button></>}</div>
         <span className={notice.includes("unavailable") ? "dash-warning" : "dash-order-status"} role="status">{notice}</span>
+        {heading}
+        <div className="dash-overview-layout">
+        <div className="dash-overview-main">
         {order.map((id, index) => <div className="dash-ordered-section" key={id}>
             {editing && <div className="dash-order-controls"><strong>{labels[id]}</strong><span>{index + 1} / {order.length}</span><button type="button" className="dash-button" aria-label={`Move ${labels[id]} up`} disabled={index === 0} onClick={() => move(id, -1)}>↑</button><button type="button" className="dash-button" aria-label={`Move ${labels[id]} down`} disabled={index === order.length - 1} onClick={() => move(id, 1)}>↓</button></div>}
             {sections[defaults.indexOf(id)]}
         </div>)}
+        {note}
+        </div>
+        {sidebar}
+        </div>
     </div>;
 }

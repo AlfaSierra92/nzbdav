@@ -1,10 +1,18 @@
 :root {
   --top-nav-height: 60px;
   --left-nav-width: 270px;
-  --body-background-color: #0b151e;
-  --top-nav-background-color: #101e29;
-  --left-nav-background-color: #0e1a24;
+  --body-background-color: #0b1020;
+  --top-nav-background-color: #0b1422;
+  --left-nav-background-color: #0b1020;
   --page-padding: 25px;
+  --accent-color: #30bbed;
+  --accent-hover: #65cef3;
+  --accent-ink: #071522;
+  --activity-color: #22c9b7;
+  --activity-rgb: 34, 201, 183;
+  --activity-soft: #173d46;
+  --panel-background: #101728;
+  --panel-border: #232b3b;
 }
 
 html, body {
@@ -24,4 +32,35 @@ html, body {
 .modal {
   --bs-modal-margin: 20px !important;
   --bs-modal-bg: hsl(196.8 25% 14.51%);
+}
+
+/* Shared cyan accent, including Bootstrap controls. */
+:root, [data-bs-theme="dark"] {
+  --bs-primary: var(--accent-color);
+  --bs-primary-rgb: 48, 187, 237;
+  --bs-link-color: var(--accent-color);
+  --bs-link-color-rgb: 48, 187, 237;
+  --bs-link-hover-color: var(--accent-hover);
+  --bs-link-hover-color-rgb: 101, 206, 243;
+  --bs-focus-ring-color: rgba(48, 187, 237, .3);
+}
+.btn-primary {
+  --bs-btn-color: var(--accent-ink);
+  --bs-btn-bg: var(--accent-color);
+  --bs-btn-border-color: var(--accent-color);
+  --bs-btn-hover-color: var(--accent-ink);
+  --bs-btn-hover-bg: var(--accent-hover);
+  --bs-btn-hover-border-color: var(--accent-hover);
+  --bs-btn-active-color: var(--accent-ink);
+  --bs-btn-active-bg: var(--accent-hover);
+  --bs-btn-active-border-color: var(--accent-hover);
+  --bs-btn-disabled-color: var(--accent-ink);
+  --bs-btn-disabled-bg: var(--accent-color);
+  --bs-btn-disabled-border-color: var(--accent-color);
+  --bs-btn-focus-shadow-rgb: 48, 187, 237;
+}
+.form-check-input:checked { background-color: var(--accent-color); border-color: var(--accent-color); }
+.form-control:focus, .form-select:focus, .form-check-input:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 .25rem rgba(48, 187, 237, .2);
 }

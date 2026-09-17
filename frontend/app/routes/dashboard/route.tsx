@@ -104,14 +104,14 @@ export default function Dashboard({ loaderData: { queue, history, health, statis
             <button className="dash-button" disabled={revalidator.state !== "idle"} onClick={() => void revalidator.revalidate()}>{revalidator.state === "idle" ? "↻ Refresh" : "Refreshing…"}</button>
         </header>
         {(!queue || !history || !health) && <div className="dash-warning" role="status">Some statistics are unavailable. Check your backend connection and refresh.</div>}
-        <SectionOrder storageKey="dashboard-sections-v1" labels={{ imports: "Import queue & summary", usenet: "Usenet overview", history: "Saved history", connections: "Connection activity", pool: "Connection pool", activity: "Recent imports", health: "Library health" }}>
+        <UsenetOverview>{usenet => <SectionOrder storageKey="dashboard-sections-v2" heading={usenet.heading} sidebar={usenet.sidebar} note={usenet.note} labels={{ metrics: "Live statistics", memory: "Article memory", usenetActivity: "Usenet activity", providers: "Providers", heatmap: "Activity heatmap", imports: "Import queue & summary", history: "Saved history", connections: "Connection activity", pool: "Connection pool", activity: "Recent imports", health: "Library health" }}>
+        {usenet.sections}
         <section className="dash-metrics" aria-label="Overview">
             <Metric label="Active connections" value={number(active)} caption={current ? `of ${current.max} available connections` : "Waiting for Usenet telemetry"} />
             <Metric label="In queue" value={number(liveQueue ?? queue?.noofslots)} caption="NZBs waiting or processing" />
             <Metric label="Successful imports" value={history?.slots.length ? `${Math.round(completed / history.slots.length * 100)}%` : "—"} caption={`Across ${history?.slots.length ?? 0} recent history entries`} />
             <Metric label="Imported size" value={history ? bytes(history.slots.filter(slot => slot.status === "Completed").reduce((sum, slot) => sum + slot.bytes, 0)) : "—"} caption="Completed NZBs in recent history" />
         </section>
-        <UsenetOverview />
         <HistoricalStatistics statistics={statistics} period={period} date={date} onQueueUpdate={setLiveQueue} />
 
             <section className="dash-panel dash-chart">
@@ -119,15 +119,15 @@ export default function Dashboard({ loaderData: { queue, history, health, statis
                 <div className="dash-chart-value">{number(active)} <span>active now</span></div>
                 <div className="dash-plot">
                     {samples.length > 1 ? <svg viewBox="0 0 720 190" role="img" aria-label={`Active connections sampled every second. Scale: zero to ${chartMax}.`}>
-                        <defs><linearGradient id="dash-fill" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#4ee0bb" stopOpacity=".25"/><stop offset="1" stopColor="#4ee0bb" stopOpacity="0"/></linearGradient></defs>
+                        <defs><linearGradient id="dash-fill" x1="0" y1="0" x2="0" y2="1"><stop stopColor="var(--activity-color)" stopOpacity=".25"/><stop offset="1" stopColor="var(--activity-color)" stopOpacity="0"/></linearGradient></defs>
                         {[20, 70, 120, 170].map(y => <line key={y} x1="0" x2="720" y1={y} y2={y} stroke="#24343f" strokeDasharray="4 5"/>)}
                         <polygon points={`0,170 ${points} ${(samples.length - 1) / 119 * 720},170`} fill="url(#dash-fill)"/>
-                        <polyline points={points} fill="none" stroke="#4ee0bb" strokeWidth="3" strokeLinejoin="round"/>
+                        <polyline points={points} fill="none" stroke="var(--activity-color)" strokeWidth="3" strokeLinejoin="round"/>
                     </svg> : <div className="dash-empty">{current ? "Collecting connection samples…" : "Waiting for connection data…"}</div>}
                 </div><div className="dash-axis"><span>Session samples · every second</span><span>Scale 0–{chartMax}</span></div>
             </section>
             <section className="dash-panel"><div className="dash-panel-heading"><div><h2>Connection pool</h2><p>Live Usenet capacity</p></div></div>
-                <div className="dash-ring" style={{ background: `conic-gradient(#4ee0bb ${utilization}%, #23333f 0)` }}><div><strong>{current ? `${Math.round(utilization)}%` : "—"}</strong><span>in use</span></div></div>
+                <div className="dash-ring" style={{ background: `conic-gradient(var(--activity-color) ${utilization}%, #23333f 0)` }}><div><strong>{current ? `${Math.round(utilization)}%` : "—"}</strong><span>in use</span></div></div>
                 <div className="dash-pool"><span>Active <b>{number(active)}</b></span><span>Idle <b>{number(current?.idle)}</b></span><span>Limit <b>{number(current?.max)}</b></span></div>
             </section>
             <section className="dash-panel"><div className="dash-panel-heading"><div><h2>Recent activity</h2><p>{history ? `Latest ${history.slots.length} of ${history.noofslots} history entries` : "History unavailable"}</p></div><Link to="/queue">View all ↗</Link></div>
@@ -137,7 +137,7 @@ export default function Dashboard({ loaderData: { queue, history, health, statis
                 <div className="dash-health"><strong>{healthCount ? `${Math.round(healthy / healthCount * 100)}%` : "—"}</strong><span>healthy checks</span></div>
                 <div className="dash-summary"><span>Checks recorded<b>{number(healthCount)}</b></span><span>Healthy<b>{health ? number(healthy) : "—"}</b></span><span>Failed recent imports<b>{history ? number(failed) : "—"}</b></span></div>
             </section>
-        </SectionOrder>
+        </SectionOrder>}</UsenetOverview>
         <footer className="dash-footnote">Connections, queue and saved-history view refresh every second. Import and health data refresh every 15 seconds. Import statistics use the latest 100 history entries; imported size is NZB content size, not network traffic.</footer>
     </main>;
 }
