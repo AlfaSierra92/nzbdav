@@ -154,3 +154,22 @@ Import queue/summary, Usenet overview, saved history, connection activity, conne
 Preferences are saved locally in the current browser, independently for the dashboard and Usenet sections. Unrecognized/duplicate saved entries are discarded and new sections are appended. If browser storage is unavailable, controls still work for the current page and report that the order could not be persisted.
 
 Provider error attempts are logged at Warning level to the container console, including attempts recovered by a retry, unsuccessful NNTP responses (code and message), and article stream failures (once per stream). Missing articles and cancellations remain excluded from the error counter. The provider MB/s sparkline shows average decoded throughput per observed interval in the selected period; the number below it remains the current sampled throughput.
+
+## Provider error log volume
+
+Set `PROVIDER_ERROR_LOG_MODE` in the container environment:
+
+| Value | Behavior |
+| --- | --- |
+| `all` (default) | Log every provider error, including attempts followed by a retry. |
+| `final` | Skip errors followed by a retry on the same provider. Keep exhausted retries, unsuccessful NNTP responses, and article stream failures. Another provider may still recover the request. |
+| `off` | Disable these provider error messages. Other application logs, including terminal request failures, remain controlled by `LOG_LEVEL`. |
+
+For Docker Compose, add this to the service:
+
+```yaml
+environment:
+  PROVIDER_ERROR_LOG_MODE: "final"
+```
+
+For `docker run`, add `-e PROVIDER_ERROR_LOG_MODE=final`. Recreate the container after changing the environment. Values are case-insensitive; unknown or empty values behave as `all`. Emitted messages remain at Warning level and respect `LOG_LEVEL`. Dashboard error/retry counters are unchanged in every mode.

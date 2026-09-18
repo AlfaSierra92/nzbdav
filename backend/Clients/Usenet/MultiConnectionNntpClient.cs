@@ -8,6 +8,7 @@ using NzbWebDAV.Clients.Usenet.Models;
 using NzbWebDAV.Exceptions;
 using NzbWebDAV.Extensions;
 using NzbWebDAV.Models;
+using NzbWebDAV.Utils;
 using Serilog;
 using UsenetSharp.Models;
 
@@ -176,13 +177,13 @@ public class MultiConnectionNntpClient(
                 LogException(() => connectionLock?.Dispose());
                 if (retryCount > 0)
                 {
-                    Log.Warning(e, "Error getting connection-lock for provider {Provider}. Retrying with a new connection.", providerName);
+                    ProviderErrorLogging.Warning(retryCount > 0, e, "Error getting connection-lock for provider {Provider}. Retrying with a new connection.", providerName);
                     if (isFetch) telemetry?.Retry();
                     retryCount--;
                     continue;
                 }
 
-                Log.Warning(e, "Error getting connection-lock for provider {Provider}.", providerName);
+                ProviderErrorLogging.Warning(retryCount > 0, e, "Error getting connection-lock for provider {Provider}.", providerName);
                 LogException(() => onConnectionReadyAgain?.Invoke(ArticleBodyResult.NotRetrieved));
                 throw;
             }
@@ -214,13 +215,13 @@ public class MultiConnectionNntpClient(
                 LogException(() => connectionLock?.Dispose());
                 if (retryCount > 0)
                 {
-                    Log.Warning(e, "Error executing nntp {Command} command for provider {Provider}. Retrying with a new connection.", name, providerName);
+                    ProviderErrorLogging.Warning(retryCount > 0, e, "Error executing nntp {Command} command for provider {Provider}. Retrying with a new connection.", name, providerName);
                     if (isFetch) telemetry?.Retry();
                     retryCount--;
                     continue;
                 }
 
-                Log.Warning(e, "Error executing nntp {Command} command for provider {Provider}.", name, providerName);
+                ProviderErrorLogging.Warning(retryCount > 0, e, "Error executing nntp {Command} command for provider {Provider}.", name, providerName);
                 LogException(() => onConnectionReadyAgain?.Invoke(ArticleBodyResult.NotRetrieved));
                 throw;
             }
@@ -241,7 +242,7 @@ public class MultiConnectionNntpClient(
                 else
                 {
                     telemetry.Error();
-                    Log.Warning("NNTP {Command} failed for provider {Provider}: {ResponseCode} {ResponseMessage}",
+                    ProviderErrorLogging.Warning(false, null, "NNTP {Command} failed for provider {Provider}: {ResponseCode} {ResponseMessage}",
                         name, providerName, result.ResponseCode, result.ResponseMessage);
                 }
             }

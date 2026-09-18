@@ -1,6 +1,6 @@
 using NzbWebDAV.Extensions;
 using NzbWebDAV.Statistics;
-using Serilog;
+using NzbWebDAV.Utils;
 using UsenetSharp.Models;
 using UsenetSharp.Streams;
 
@@ -23,7 +23,7 @@ public sealed class TelemetryYencStream(YencStream inner, ProviderTelemetry tele
         {
             telemetry.Error();
             UsenetTelemetry.Shared.HardFailure();
-            Log.Warning(error, "Error reading NNTP article stream for provider {Provider}", telemetry.Name);
+            ProviderErrorLogging.Warning(false, error, "Error reading NNTP article stream for provider {Provider}", telemetry.Name);
         }
     }
     public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
