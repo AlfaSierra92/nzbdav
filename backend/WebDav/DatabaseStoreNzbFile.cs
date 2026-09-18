@@ -31,7 +31,10 @@ public class DatabaseStoreNzbFile(
         var id = davNzbFile.Id;
         var file = await dbClient.GetDavNzbFileAsync(davNzbFile, cancellationToken).ConfigureAwait(false);
         if (file is null) throw new FileNotFoundException($"Could not find nzb file with id: {id}");
-        return GetStream(file);
+        var overlay = await RecoveryOverlay.TryCreateNzbFileStreamAsync(
+            davNzbFile, file.SegmentIds, usenetClient, configManager.GetArticleBufferSize(), cancellationToken
+        ).ConfigureAwait(false);
+        return overlay ?? GetStream(file);
     }
 
     private NzbFileStream GetStream(DavNzbFile nzbFile)

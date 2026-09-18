@@ -195,6 +195,59 @@ public class ConfigManager
                && GetArrConfig().GetInstanceCount() > 0;
     }
 
+    public bool IsPar2RepairEnabled()
+    {
+        // master toggle for PAR2 repair, off by default so that upgrading an existing
+        // install never silently starts downloading recovery volumes. Unlike the
+        // neighbouring bool getters this tolerates an unparseable value instead of
+        // throwing: it is read from the streaming read path, where a corrupt config row
+        // must not take playback down.
+        var defaultValue = false;
+        var configValue = StringUtil.EmptyToNull(GetConfigValue(ConfigKeys.RepairPar2Enable));
+        if (configValue == null || !bool.TryParse(configValue, out var isEnabled)) return defaultValue;
+        return isEnabled;
+    }
+
+    /// <summary>What to do with an item PAR2 could not recover.</summary>
+    public Par2Fallback GetPar2Fallback()
+    {
+        var defaultValue = Par2Fallback.ArrResearch;
+        var configValue = StringUtil.EmptyToNull(GetConfigValue(ConfigKeys.RepairPar2Fallback));
+        return configValue?.ToLowerInvariant() switch
+        {
+            "arr-research" => Par2Fallback.ArrResearch,
+            "mark-only" => Par2Fallback.MarkOnly,
+            "delete" => Par2Fallback.Delete,
+            _ => defaultValue,
+        };
+    }
+
+    /// <summary>Disk budget for recovered data. 0 means unlimited.</summary>
+    public long GetPar2MaxStorageBytes()
+    {
+        // A negative or unparseable value is meaningless rather than restrictive, so it
+        // falls back to unlimited too.
+        var defaultValue = 0L;
+        var configValue = StringUtil.EmptyToNull(GetConfigValue(ConfigKeys.RepairPar2MaxStorageBytes));
+        if (configValue == null || !long.TryParse(configValue, out var maxBytes) || maxBytes < 0)
+            return defaultValue;
+        return maxBytes;
+    }
+
+    /// <summary>
+    /// How many repairs may run at once. Each repair holds usenet connections open, so
+    /// this bounds connection pressure.
+    /// </summary>
+    public int GetPar2MaxConcurrentRepairs()
+    {
+        // at least one, otherwise a zero would stall repairs entirely.
+        var defaultValue = 1;
+        var configValue = StringUtil.EmptyToNull(GetConfigValue(ConfigKeys.RepairPar2MaxConcurrent));
+        if (configValue == null || !int.TryParse(configValue, out var maxConcurrent) || maxConcurrent < 1)
+            return defaultValue;
+        return maxConcurrent;
+    }
+
     public ArrConfig GetArrConfig()
     {
         var defaultValue = new ArrConfig();

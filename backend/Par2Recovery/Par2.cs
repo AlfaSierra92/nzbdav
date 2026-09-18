@@ -1,4 +1,5 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using NzbWebDAV.Par2Recovery.Packets;
@@ -18,26 +19,40 @@ namespace NzbWebDAV.Par2Recovery
         public static async IAsyncEnumerable<FileDesc> ReadFileDescriptions
         (
             Stream stream,
-            CancellationToken ct = default
+            [EnumeratorCancellation] CancellationToken ct = default
         )
         {
-            Par2Packet? packet = null;
+            await foreach (var packet in ReadAllPacketsAsync(stream, ct).ConfigureAwait(false))
+            {
+                if (packet is FileDesc fileDesc)
+                    yield return fileDesc;
+            }
+        }
+
+        /// <summary>
+        /// Streams PAR2 packets, stopping at the first malformed packet as the
+        /// existing file-description reader does.
+        /// </summary>
+        public static async IAsyncEnumerable<Par2Packet> ReadAllPacketsAsync
+        (
+            Stream stream,
+            [EnumeratorCancellation] CancellationToken ct = default
+        )
+        {
             while (stream.Position < stream.Length && !ct.IsCancellationRequested)
             {
+                Par2Packet packet;
                 try
                 {
                     packet = await ReadPacketAsync(stream).ConfigureAwait(false);
                 }
                 catch (Exception e)
                 {
-                    Log.Warning($"Failed to read par2 packet: {e.Message}");
+                    Log.Warning(e, "Failed to read PAR2 packet");
                     yield break;
                 }
 
-                if (packet is FileDesc newFile)
-                {
-                    yield return newFile;
-                }
+                yield return packet;
             }
         }
 
@@ -58,6 +73,15 @@ namespace NzbWebDAV.Par2Recovery
             {
                 case FileDesc.PacketType:
                     result = new FileDesc(header);
+                    break;
+                case Main.PacketType:
+                    result = new Main(header);
+                    break;
+                case Ifsc.PacketType:
+                    result = new Ifsc(header);
+                    break;
+                case RecoverySlice.PacketType:
+                    result = new RecoverySlice(header);
                     break;
                 default:
                     result = new Par2Packet(header);

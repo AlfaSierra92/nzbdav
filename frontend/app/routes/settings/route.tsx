@@ -7,7 +7,7 @@ import { isSabnzbdSettingsUpdated, isSabnzbdSettingsValid, SabnzbdSettings } fro
 import { isWebdavSettingsUpdated, isWebdavSettingsValid, WebdavSettings } from "./webdav/webdav";
 import { isArrsSettingsUpdated, isArrsSettingsValid, ArrsSettings } from "./arrs/arrs";
 import { isMaintenanceSettingsUpdated, Maintenance } from "./maintenance/maintenance";
-import { isRepairsSettingsUpdated, RepairsSettings } from "./repairs/repairs";
+import { isRepairsSettingsUpdated, isRepairsSettingsValid, RepairsSettings } from "./repairs/repairs";
 import { isRcloneSettingsUpdated, RcloneSettings } from "./rclone/rclone";
 import { useCallback, useState } from "react";
 import { useBlocker } from "react-router";
@@ -43,6 +43,10 @@ const defaultConfig = {
     "media.library-dir": "",
     "arr.instances": "{\"RadarrInstances\":[],\"SonarrInstances\":[],\"QueueRules\":[]}",
     "repair.enable": "false",
+    "repair.par2.enable": "false",
+    "repair.par2.fallback": "arr-research",
+    "repair.par2.max-storage-bytes": "0",
+    "repair.par2.max-concurrent": "1",
     "db.is-startup-vacuum-enabled": "false",
     "maintenance.remove-orphaned-schedule-enabled": "false",
     "maintenance.remove-orphaned-schedule-time": "0",
@@ -110,6 +114,7 @@ function Body(props: BodyProps) {
         : isSabnzbdUpdated && !isSabnzbdSettingsValid(newConfig) ? "Invalid SABnzbd settings"
         : isWebdavUpdated && !isWebdavSettingsValid(newConfig) ? "Invalid WebDAV settings"
         : isArrsUpdated && !isArrsSettingsValid(newConfig) ? "Invalid Arrs settings"
+        : isRepairsUpdated && !isRepairsSettingsValid(newConfig) ? "Invalid Repairs settings"
         : "Save";
     const saveButtonVariant = saveButtonLabel === "Save" ? "primary"
         : saveButtonLabel === "Saved ✅" ? "success"

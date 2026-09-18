@@ -64,6 +64,18 @@ public class BlobStore
         return await MemoryPackSerializer.DeserializeAsync<T>(decompressionStream);
     }
 
+    public static long GetBlobSize(Guid id)
+    {
+        var file = new FileInfo(GetBlobPath(id));
+        return file.Exists ? file.Length : 0;
+    }
+
+    public static DateTimeOffset GetBlobWriteTime(Guid id)
+    {
+        var file = new FileInfo(GetBlobPath(id));
+        return file.Exists ? new DateTimeOffset(file.LastWriteTimeUtc) : DateTimeOffset.MinValue;
+    }
+
     public static void Delete(Guid id)
     {
         var blobPath = GetBlobPath(id);

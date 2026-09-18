@@ -32,16 +32,21 @@ public class DatabaseStoreRarFile(
         var id = davRarFile.Id;
         var rarFile = await dbClient.GetDavRarFileAsync(davRarFile, ct).ConfigureAwait(false);
         if (rarFile is null) throw new FileNotFoundException($"Could not find nzb file with id: {id}");
-        return GetStream(rarFile);
+        var partStreamFactory = await RecoveryOverlay.TryCreatePartStreamFactoryAsync(
+            davRarFile, usenetClient, configManager.GetArticleBufferSize(), ct
+        ).ConfigureAwait(false);
+        return GetStream(rarFile, partStreamFactory);
     }
 
-    private DavMultipartFileStream GetStream(DavRarFile rarFile)
+    private DavMultipartFileStream GetStream(
+        DavRarFile rarFile, Func<int, DavMultipartFile.FilePart, Stream>? partStreamFactory)
     {
         return new DavMultipartFileStream
         (
             rarFile.ToDavMultipartFileMeta().FileParts,
             usenetClient,
-            configManager.GetArticleBufferSize()
+            configManager.GetArticleBufferSize(),
+            partStreamFactory
         );
     }
 }

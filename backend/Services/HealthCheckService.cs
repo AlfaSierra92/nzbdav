@@ -175,22 +175,37 @@ public class HealthCheckService : BackgroundService
 
     private async Task<List<string>> GetAllSegments(DavItem davItem, DavDatabaseClient dbClient, CancellationToken ct)
     {
+        var parts = await GetPostedParts(davItem, dbClient, ct).ConfigureAwait(false);
+        DavFileRecovery? recovery = null;
+        if (davItem.RecoveryBlobId is { } blobId)
+        {
+            await using var blob = BlobStore.ReadBlob(blobId);
+            if (blob != null)
+                (recovery, _) = await RecoveryBlob.ReadMetadataAsync(blob, ct).ConfigureAwait(false);
+        }
+
+        // Only skip missing articles when their recovered bytes are still on disk.
+        return RecoveredSegmentFilter.Filter(parts, recovery);
+    }
+
+    private async Task<IReadOnlyList<string[]>> GetPostedParts(DavItem davItem, DavDatabaseClient dbClient, CancellationToken ct)
+    {
         if (davItem.SubType == DavItem.ItemSubType.NzbFile)
         {
             var nzbFile = await dbClient.GetDavNzbFileAsync(davItem, ct).ConfigureAwait(false);
-            return nzbFile?.SegmentIds?.ToList() ?? [];
+            return nzbFile?.SegmentIds is { } ids ? [ids] : [];
         }
 
         if (davItem.SubType == DavItem.ItemSubType.RarFile)
         {
             var rarFile = await dbClient.GetDavRarFileAsync(davItem, ct).ConfigureAwait(false);
-            return rarFile?.RarParts?.SelectMany(x => x.SegmentIds)?.ToList() ?? [];
+            return rarFile?.RarParts?.Select(x => x.SegmentIds)?.ToList() ?? [];
         }
 
         if (davItem.SubType == DavItem.ItemSubType.MultipartFile)
         {
             var multipartFile = await dbClient.GetDavMultipartFileAsync(davItem, ct).ConfigureAwait(false);
-            return multipartFile?.Metadata?.FileParts?.SelectMany(x => x.SegmentIds)?.ToList() ?? [];
+            return multipartFile?.Metadata?.FileParts?.Select(x => x.SegmentIds)?.ToList() ?? [];
         }
 
         return [];
@@ -246,6 +261,47 @@ public class HealthCheckService : BackgroundService
                 }));
                 await dbClient.Ctx.SaveChangesAsync(ct).ConfigureAwait(false);
                 return;
+            }
+
+            // Blocklisted and orphaned files have already been handled above.
+            // Try PAR2 before asking an Arr to replace this linked item.
+            if (_configManager.IsPar2RepairEnabled())
+            {
+                var result = await new Par2RepairService(_usenetClient, _configManager)
+                    .RepairAsync(davItem, dbClient, ct).ConfigureAwait(false);
+                var nextStep = Par2RepairDecision.Resolve(result.Outcome, _configManager.GetPar2Fallback());
+                if (nextStep == Par2RepairNextStep.KeepRepaired)
+                {
+                    var now = DateTimeOffset.UtcNow;
+                    davItem.LastHealthCheck = now;
+                    davItem.NextHealthCheck = davItem.ReleaseDate is { } releaseDate && releaseDate < now
+                        ? now + (now - releaseDate)
+                        : now + TimeSpan.FromDays(1);
+                    await RecordPar2Result(dbClient, davItem, HealthCheckResult.RepairAction.Repaired,
+                        $"File failed health validation. Rebuilt the missing articles from PAR2 recovery data. {result.Message}", ct)
+                        .ConfigureAwait(false);
+                    return;
+                }
+
+                if (nextStep == Par2RepairNextStep.MarkOnly)
+                {
+                    davItem.LastHealthCheck = DateTimeOffset.UtcNow;
+                    davItem.NextHealthCheck = davItem.LastHealthCheck + TimeSpan.FromDays(1);
+                    await RecordPar2Result(dbClient, davItem, HealthCheckResult.RepairAction.ActionNeeded,
+                        $"PAR2 repair was not possible. {result.Message} Leaving the file in place for manual triage.", ct)
+                        .ConfigureAwait(false);
+                    return;
+                }
+
+                if (nextStep == Par2RepairNextStep.Delete)
+                {
+                    File.Delete(symlinkOrStrmPath);
+                    dbClient.Ctx.Items.Remove(davItem);
+                    await RecordPar2Result(dbClient, davItem, HealthCheckResult.RepairAction.Deleted,
+                        $"PAR2 repair was not possible. {result.Message} Deleted the WebDAV file and library link as configured.", ct)
+                        .ConfigureAwait(false);
+                    return;
+                }
             }
 
             // if the unhealthy item is linked within the organized media-library
@@ -307,7 +363,7 @@ public class HealthCheckService : BackgroundService
             }));
             await dbClient.Ctx.SaveChangesAsync(ct).ConfigureAwait(false);
         }
-        catch (Exception e)
+        catch (Exception e) when (!ct.IsCancellationRequested && !e.IsCancellationException())
         {
             // if an error is encountered during repairs,
             // then mark the item as unhealthy, and check again in a day.
@@ -326,6 +382,20 @@ public class HealthCheckService : BackgroundService
             }));
             await dbClient.Ctx.SaveChangesAsync(ct).ConfigureAwait(false);
         }
+    }
+
+    private async Task RecordPar2Result(
+        DavDatabaseClient dbClient, DavItem item, HealthCheckResult.RepairAction action,
+        string message, CancellationToken ct)
+    {
+        dbClient.Ctx.HealthCheckResults.Add(SendStatus(new HealthCheckResult
+        {
+            Id = Guid.NewGuid(), DavItemId = item.Id, Path = item.Path,
+            CreatedAt = DateTimeOffset.UtcNow,
+            Result = HealthCheckResult.HealthResult.Unhealthy,
+            RepairStatus = action, Message = message,
+        }));
+        await dbClient.Ctx.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
     private HealthCheckResult SendStatus(HealthCheckResult result)

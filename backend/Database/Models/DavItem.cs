@@ -22,6 +22,7 @@ public class DavItem
     public Guid? HistoryItemId { get; set; }
     public Guid? FileBlobId { get; set; }
     public Guid? NzbBlobId { get; set; }
+    public Guid? RecoveryBlobId { get; set; }
 
     public static DavItem New
     (
