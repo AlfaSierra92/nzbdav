@@ -148,15 +148,16 @@ public class MultiProviderNntpClient(List<MultiConnectionNntpClient> providers) 
                 if (!isLastProvider && result.ResponseType == UsenetResponseType.NoArticleWithThatMessageId)
                     continue;
 
-                if (isFetch && !result.Success) UsenetTelemetry.Shared.HardFailure();
+                if (isFetch && !result.Success && !cancellationToken.IsCancellationRequested) UsenetTelemetry.Shared.HardFailure();
                 return result;
             }
-            catch (Exception e) when (!e.IsCancellationException())
+            catch (Exception e) when (!cancellationToken.IsCancellationRequested && !e.IsCancellationException())
             {
                 lastException = ExceptionDispatchInfo.Capture(e);
             }
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         if (isFetch) UsenetTelemetry.Shared.HardFailure();
         lastException?.Throw();
         throw new Exception("There are no usenet providers configured.");

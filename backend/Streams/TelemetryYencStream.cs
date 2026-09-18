@@ -7,7 +7,8 @@ using UsenetSharp.Streams;
 namespace NzbWebDAV.Streams;
 
 // Delegate decoding unchanged; count decoded bytes actually read, never file-size estimates.
-public sealed class TelemetryYencStream(YencStream inner, ProviderTelemetry telemetry, UsenetTelemetry.ReadSession? read)
+public sealed class TelemetryYencStream(YencStream inner, ProviderTelemetry telemetry, UsenetTelemetry.ReadSession? read,
+    CancellationToken operationCancellationToken = default)
     : YencStream(Null, allocateBuffers: false)
 {
     private int _disposed;
@@ -15,8 +16,14 @@ public sealed class TelemetryYencStream(YencStream inner, ProviderTelemetry tele
     public override async ValueTask<UsenetYencHeader?> GetYencHeadersAsync(CancellationToken cancellationToken = default)
     {
         try { return await inner.GetYencHeadersAsync(cancellationToken).ConfigureAwait(false); }
-        catch (Exception error) when (!error.IsCancellationException()) { RecordFailure(error); throw; }
+        catch (Exception error) when (!IsCancellation(error, cancellationToken)) { RecordFailure(error); throw; }
     }
+    // The article can outlive the command: a seek/disposal cancels its original
+    // token even when a later read supplies a different token (or none).
+    private bool IsCancellation(Exception error, CancellationToken readToken) =>
+        operationCancellationToken.IsCancellationRequested || readToken.IsCancellationRequested ||
+        Volatile.Read(ref _disposed) != 0 || error.IsCancellationException();
+
     private void RecordFailure(Exception error)
     {
         if (Interlocked.Exchange(ref _failed, 1) == 0)
@@ -34,7 +41,7 @@ public sealed class TelemetryYencStream(YencStream inner, ProviderTelemetry tele
             if (count > 0) { telemetry.Bytes(count); read?.ProviderRead(telemetry.Id, count); }
             return count;
         }
-        catch (Exception error) when (!error.IsCancellationException())
+        catch (Exception error) when (!IsCancellation(error, cancellationToken))
         {
             RecordFailure(error);
             throw;

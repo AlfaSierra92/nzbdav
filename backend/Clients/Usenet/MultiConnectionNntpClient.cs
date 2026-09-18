@@ -163,10 +163,12 @@ public class MultiConnectionNntpClient(
             {
                 connectionLock = await connectionPool.GetConnectionLockAsync(priority, ct).ConfigureAwait(false);
             }
-            catch (Exception e) when (e.IsCancellationException())
+            catch (Exception e) when (ct.IsCancellationRequested || e.IsCancellationException())
             {
                 LogException(() => connectionLock?.Dispose());
                 LogException(() => onConnectionReadyAgain?.Invoke(ArticleBodyResult.NotRetrieved));
+                if (ct.IsCancellationRequested && !e.IsCancellationException())
+                    throw new OperationCanceledException("NNTP operation cancelled by caller.", e, ct);
                 throw;
             }
             catch (Exception e)
@@ -194,10 +196,12 @@ public class MultiConnectionNntpClient(
             {
                 result = await command(connectionLock.Connection, OnConnectionReadyAgain).ConfigureAwait(false);
             }
-            catch (Exception e) when (e.IsCancellationException())
+            catch (Exception e) when (ct.IsCancellationRequested || e.IsCancellationException())
             {
                 LogException(() => connectionLock?.Dispose());
                 LogException(() => onConnectionReadyAgain?.Invoke(ArticleBodyResult.NotRetrieved));
+                if (ct.IsCancellationRequested && !e.IsCancellationException())
+                    throw new OperationCanceledException("NNTP operation cancelled by caller.", e, ct);
                 throw;
             }
             catch (Exception e) when (e.TryGetCausingException(out UsenetArticleNotFoundException _))
@@ -234,12 +238,12 @@ public class MultiConnectionNntpClient(
                     telemetry.Article(Stopwatch.GetElapsedTime(started).TotalMilliseconds);
                     // Records are immutable: preserve headers/status while decorating only the decoded stream.
                     if (result is UsenetDecodedBodyResponse body)
-                        result = (T)(UsenetResponse)(body with { Stream = new TelemetryYencStream(body.Stream, telemetry, readSession) });
+                        result = (T)(UsenetResponse)(body with { Stream = new TelemetryYencStream(body.Stream, telemetry, readSession, ct) });
                     else if (result is UsenetDecodedArticleResponse article)
-                        result = (T)(UsenetResponse)(article with { Stream = new TelemetryYencStream(article.Stream, telemetry, readSession) });
+                        result = (T)(UsenetResponse)(article with { Stream = new TelemetryYencStream(article.Stream, telemetry, readSession, ct) });
                 }
                 else if (result.ResponseType == UsenetResponseType.NoArticleWithThatMessageId) telemetry.Miss();
-                else
+                else if (!ct.IsCancellationRequested)
                 {
                     telemetry.Error();
                     ProviderErrorLogging.Warning(false, null, "NNTP {Command} failed for provider {Provider}: {ResponseCode} {ResponseMessage}",
