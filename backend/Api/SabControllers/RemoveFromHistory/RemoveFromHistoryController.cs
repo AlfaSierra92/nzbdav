@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+using NzbWebDAV.Database.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NzbWebDAV.Config;
@@ -15,10 +17,16 @@ public class RemoveFromHistoryController(
 {
     public async Task<RemoveFromHistoryResponse> RemoveFromHistory(RemoveFromHistoryRequest request)
     {
-        await dbClient.RemoveHistoryItemsAsync(request.NzoIds, request.DeleteCompletedFiles, request.CancellationToken).ConfigureAwait(false);
+        var ids = request.FailedOnly
+            ? await dbClient.Ctx.HistoryItems
+                .Where(x => x.DownloadStatus == HistoryItem.DownloadStatusOption.Failed)
+                .Select(x => x.Id).ToListAsync(request.CancellationToken).ConfigureAwait(false)
+            : request.NzoIds;
+        await dbClient.RemoveHistoryItemsAsync(ids, !request.FailedOnly && request.DeleteCompletedFiles, request.CancellationToken).ConfigureAwait(false);
         await dbClient.Ctx.SaveChangesAsync(request.CancellationToken).ConfigureAwait(false);
-        _ = websocketManager.SendMessage(WebsocketTopic.HistoryItemRemoved, string.Join(",", request.NzoIds));
-        return new RemoveFromHistoryResponse() { Status = true };
+        if (ids.Count > 0)
+            _ = websocketManager.SendMessage(WebsocketTopic.HistoryItemRemoved, string.Join(",", ids));
+        return new RemoveFromHistoryResponse() { Status = true, RemovedIds = ids };
     }
 
     protected override async Task<IActionResult> Handle()

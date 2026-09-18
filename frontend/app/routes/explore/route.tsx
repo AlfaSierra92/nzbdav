@@ -1,9 +1,11 @@
+import { Alert } from "react-bootstrap";
+import { ConfirmModal } from "~/components/confirm-modal/confirm-modal";
 import type { Route } from "./+types/route";
 import { Breadcrumbs } from "./breadcrumbs/breadcrumbs";
 import styles from "./route.module.css"
-import { Link, redirect, useLocation, useNavigation } from "react-router";
+import { Link, redirect, useLocation, useNavigation, useRevalidator } from "react-router";
 import { backendClient, type DirectoryItem } from "~/clients/backend-client.server";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { lookup as getMimeType } from 'mime-types';
 import { getDownloadKey } from "~/auth/downloads.server";
 import { Loading } from "../_index/components/loading/loading";
@@ -51,6 +53,31 @@ function Body(props: ExplorePageData) {
     const navigation = useNavigation();
     const isNavigating = Boolean(navigation.location);
 
+    const revalidator = useRevalidator();
+    const [removal, setRemoval] = useState<{ item: DirectoryItem, directory: string }>();
+    const [isRemoving, setIsRemoving] = useState(false);
+    const [error, setError] = useState<string>();
+    const directory = getWebdavPathDecoded(location.pathname);
+    const canRemove = directory === "content" || directory.startsWith("content/");
+    const confirmRemoval = async () => {
+        if (!removal || isRemoving) return;
+        setIsRemoving(true);
+        setError(undefined);
+        setRemoval(undefined);
+        try {
+            const body = new FormData();
+            body.append("directory", removal.directory);
+            body.append("name", removal.item.name);
+            const response = await fetch('/api/delete-webdav-item', { method: 'POST', body });
+            const data = await response.json();
+            if (!response.ok || data.status !== true) throw new Error(data.error || "Removal failed.");
+            await revalidator.revalidate();
+        } catch (error) {
+            setError(error instanceof Error ? error.message : "Removal failed. Please try again.");
+        } finally {
+            setIsRemoving(false);
+        }
+    };
     const items = props.items;
     const parentDirectories = isNavigating
         ? getParentDirectories(getWebdavPathDecoded(navigation.location!.pathname))
@@ -71,6 +98,12 @@ function Body(props: ExplorePageData) {
     return (
         <div className={styles.container}>
             <Breadcrumbs parentDirectories={parentDirectories} />
+            {error && <Alert variant="danger" dismissible onClose={() => setError(undefined)}>{error}</Alert>}
+            <ConfirmModal show={!!removal} title="Remove From DAV?"
+                message={removal?.item.isDirectory
+                    ? `Remove "${removal.item.name}" and all its contents?`
+                    : `Remove "${removal?.item.name ?? ''}"?`}
+                onConfirm={confirmRemoval} onCancel={() => setRemoval(undefined)} />
             {!isNavigating &&
                 <div>
                     {items.filter(x => x.isDirectory).map((x, index) =>
@@ -81,6 +114,11 @@ function Body(props: ExplorePageData) {
                                     <div className={styles["item-name"]}>{x.name}</div>
                                 </div>
                             </Link>
+                            {canRemove && <ItemMenu
+                                className={styles["item-menu"]}
+                                openClassName={styles["open-item-menu"]}
+                                exploreFile={x} disabled={isRemoving}
+                                onRemove={() => setRemoval({ item: x, directory })} />}
                         </div>
                     )}
                     {items.filter(x => !x.isDirectory).map((x, index) =>
@@ -96,6 +134,8 @@ function Body(props: ExplorePageData) {
                                 className={styles["item-menu"]}
                                 openClassName={styles["open-item-menu"]}
                                 exploreFile={x as ExploreFile}
+                                disabled={isRemoving}
+                                onRemove={canRemove ? () => setRemoval({ item: x, directory }) : undefined}
                                 previewPath={getFilePath(x as ExploreFile)} />
                         </div>
                     )}

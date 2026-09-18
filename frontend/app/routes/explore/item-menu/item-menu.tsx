@@ -1,16 +1,18 @@
 import { useCallback, useState, type ReactNode } from "react"
-import type { ExploreFile } from "../route"
+import type { DirectoryItem } from "~/clients/backend-client.server"
 import { DropdownOptions } from "~/routes/explore/dropdown-options/dropdown-options"
 import { classNames } from "~/utils/styling"
 
 export type ItemMenuProps = {
     className?: string
     openClassName?: string
-    exploreFile: ExploreFile,
-    previewPath: string,
+    exploreFile: DirectoryItem,
+    previewPath?: string,
+    onRemove?: () => void,
+    disabled?: boolean,
 }
 
-export function ItemMenu({ className, openClassName, exploreFile, previewPath }: ItemMenuProps): ReactNode {
+export function ItemMenu({ className, openClassName, exploreFile, previewPath, onRemove, disabled }: ItemMenuProps): ReactNode {
     const [isOpen, setIsOpen] = useState(false);
     const exportNzbUrl = `/api/download-nzb?nzbBlobId=${exploreFile.nzbBlobId}`;
     const downloadUrl = `${previewPath}&download=true`;
@@ -22,13 +24,18 @@ export function ItemMenu({ className, openClassName, exploreFile, previewPath }:
 
     return (
         <>
-            <div className={classNames([className, isOpen && openClassName])} onClick={onClick}>
+            <button type="button" aria-label={`Actions for ${exploreFile.name}`} aria-expanded={isOpen}
+                disabled={disabled} className={classNames([className, isOpen && openClassName])} onClick={onClick}>
                 ⋯
-            </div>
+            </button>
             <DropdownOptions isOpen={isOpen} onClose={() => setIsOpen(false)} options={[
-                { option: <Preview />, linkTo: previewPath },
-                { option: <Download />, linkTo: downloadUrl },
-                !!exploreFile.nzbBlobId ? { option: <ExportNzb />, linkTo: exportNzbUrl } : undefined
+                previewPath ? { option: <Preview />, linkTo: previewPath } : undefined,
+                previewPath ? { option: <Download />, linkTo: downloadUrl } : undefined,
+                !!exploreFile.nzbBlobId ? { option: <ExportNzb />, linkTo: exportNzbUrl } : undefined,
+                onRemove ? { option: <Remove />, variant: "danger", onSelect: () => {
+                    setIsOpen(false);
+                    onRemove();
+                } } : undefined
             ]} />
         </>
     );

@@ -1,7 +1,8 @@
+import { Alert, Button } from "react-bootstrap";
 import { ActionButton } from "../action-button/action-button"
 import { useCallback, useState } from "react"
 import { ConfirmModal } from "~/components/confirm-modal/confirm-modal"
-import { Link } from "react-router"
+import { Link, useRevalidator } from "react-router"
 import { type TriCheckboxState } from "../tri-checkbox/tri-checkbox"
 import type { PresentationHistorySlot } from "../../route"
 import { getLeafDirectoryName } from "~/utils/path"
@@ -21,6 +22,26 @@ export type HistoryTableProps = {
 
 export function HistoryTable({ historySlots, totalHistoryCount, onIsSelectedChanged, onIsRemovingChanged, onRemoved }: HistoryTableProps) {
     const [isConfirmingRemoval, setIsConfirmingRemoval] = useState(false);
+    const revalidator = useRevalidator();
+    const [confirmFailed, setConfirmFailed] = useState(false);
+    const [clearingFailed, setClearingFailed] = useState(false);
+    const [error, setError] = useState<string>();
+    const clearFailed = async () => {
+        setConfirmFailed(false);
+        setClearingFailed(true);
+        setError(undefined);
+        try {
+            const response = await fetch('/api?mode=history&name=delete&failed_only=1', { method: 'POST' });
+            const data = await response.json();
+            if (!response.ok || data.status !== true) throw new Error();
+            onRemoved(new Set<string>(data.removedIds));
+            await revalidator.revalidate();
+        } catch {
+            setError("Failed to remove failed history items. Please try again.");
+        } finally {
+            setClearingFailed(false);
+        }
+    };
     var selectedCount = historySlots.filter(x => !!x.isSelected).length;
     var headerCheckboxState: TriCheckboxState = selectedCount === 0 ? 'none' : selectedCount === historySlots.length ? 'all' : 'some';
 
@@ -63,6 +84,10 @@ export function HistoryTable({ historySlots, totalHistoryCount, onIsSelectedChan
     var sectionTitle = (
         <div className={styles.sectionTitle}>
             <h3>History</h3>
+            <Button size="sm" variant="outline-danger" disabled={clearingFailed}
+                onClick={() => setConfirmFailed(true)}>
+                {clearingFailed ? "Removing…" : "Clear failed"}
+            </Button>
             {headerCheckboxState !== 'none' &&
                 <ActionButton type="delete" onClick={onRemove} />
             }
@@ -71,6 +96,10 @@ export function HistoryTable({ historySlots, totalHistoryCount, onIsSelectedChan
 
     return (
         <PageSection title={sectionTitle}>
+            {error && <Alert variant="danger" onClose={() => setError(undefined)} dismissible>{error}</Alert>}
+            <ConfirmModal show={confirmFailed} title="Clear Failed History?"
+                message="All failed items will be removed from history, including items not currently displayed."
+                onConfirm={clearFailed} onCancel={() => setConfirmFailed(false)} />
             <PageTable headerCheckboxState={headerCheckboxState} onHeaderCheckboxChange={onSelectAll}>
                 {historySlots.map(slot =>
                     <HistoryRow

@@ -9,6 +9,7 @@ namespace NzbWebDAV.Api.SabControllers.RemoveFromHistory;
 public class RemoveFromHistoryRequest
 {
     public List<Guid> NzoIds { get; private init; } = [];
+    public bool FailedOnly { get; private init; }
     public bool DeleteCompletedFiles { get; private init; }
     public CancellationToken CancellationToken { get; private init; }
 
@@ -30,6 +31,7 @@ public class RemoveFromHistoryRequest
             NzoIds = NzoIdsFromQueryParam(httpContext)
                 .Concat(await NzoIdsFromRequestBody(httpContext, cancellationToken).ConfigureAwait(false))
                 .ToList(),
+            FailedOnly = httpContext.GetRequestParam("failed_only") == "1",
             DeleteCompletedFiles = httpContext.GetRequestParam("del_completed_files") == "1",
             CancellationToken = cancellationToken
         };

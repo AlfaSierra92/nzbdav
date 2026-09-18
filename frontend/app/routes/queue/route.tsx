@@ -5,7 +5,7 @@ import { Alert } from 'react-bootstrap';
 import { backendClient, type HistorySlot, type QueueSlot } from "~/clients/backend-client.server";
 import { HistoryTable } from "./components/history-table/history-table";
 import { QueueTable } from "./components/queue-table/queue-table";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useHistoryEvents, useQueueEvents } from "./controllers/events-controller";
 import { initializeQueueHistoryWebsocket } from "./controllers/websocket-controller";
 import { initializeUploadController } from "./controllers/nzb-upload-controller";
@@ -43,6 +43,9 @@ export async function loader({ request }: Route.LoaderArgs) {
 export default function Queue(props: Route.ComponentProps) {
     const [queueSlots, setQueueSlots] = useState<PresentationQueueSlot[]>(props.loaderData.queueSlots);
     const [historySlots, setHistorySlots] = useState<PresentationHistorySlot[]>(props.loaderData.historySlots);
+    useEffect(() => {
+        setHistorySlots(props.loaderData.historySlots);
+    }, [props.loaderData.historySlots]);
     const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([]);
     const uploadQueueRef = useRef<UploadingFile[]>([]);
     const manualCategoryRef = useRef<string>(props.loaderData.manualCategory);
