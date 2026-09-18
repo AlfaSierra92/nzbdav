@@ -59,7 +59,9 @@ Each period provides completed/failed imports, completed content size, average a
 
 The first capture imports all import/check records still available in the existing application database. Later captures scan since the last successful in-memory capture with a one-day overlap. After restart, scanning resumes from the last durable checkpoint. Previously archived entries remain available after the original history is cleared. Because import/check reconciliation polls every 15 seconds, records deleted before reconciliation cannot be recovered. Existing health aggregates may therefore contain checks whose individual records are no longer available for backfill. No connection or queue telemetry is reconstructed for time before collection started or while the backend was stopped. Sampling measures observed values, not every intermediate connection peak. History timestamps use the existing server-local `HistoryItem.CreatedAt` convention and are normalized to UTC; health timestamps already have an offset.
 
-Imported size is NZB content size, **not network traffic**. Health percentage describes recorded checks, not the percentage of the whole library verified healthy.
+The overview's **Imported size** measures the logical size of files currently reachable under `/content`, across the entire DAV library. It refreshes on opening the dashboard, on **Refresh**, and every 15 seconds while visible. Removing files or folders reduces it; deleting history alone does not. Descendants of deleted folders are excluded immediately, even before background cleanup finishes. Virtual symlink/ID views are not counted again. This is **not local disk usage or network traffic**.
+
+Saved period import sizes remain historical NZB content totals and do not decrease when files are removed. Health percentage describes recorded checks, not the percentage of the whole library verified healthy.
 
 ## Implementation
 
@@ -67,7 +69,7 @@ Imported size is NZB content size, **not network traffic**. Health percentage de
 - `DashboardStatisticsStore`: separate SQLite store using the SQLite dependency already provided by Entity Framework; no additional packages.
 - `/api/dashboard-statistics?period=day&date=YYYY-MM-DD`: authenticated API, using the existing API-key mechanism. Invalid periods/dates return HTTP 400.
 - Live connection chart: existing `cxs` WebSocket state, sampled every second (120 points) for the last two minutes of the browser session. This remains separate from the durable second samples.
-- Connections, queue count and the archive view refresh every second while visible. The archive uses a dedicated background request with no overlapping requests, a timeout, and cancellation on navigation/unmount; it does not reload the page. Recent import history and the health overview refresh every 15 seconds. The top overview still uses the latest 100 import records and the existing 30-day health summary; selected-period values are in **Statistics history**.
+- Connections, queue count and the archive view refresh every second while visible. The archive uses a dedicated background request with no overlapping requests, a timeout, and cancellation on navigation/unmount; it does not reload the page. Recent import history and the health overview refresh every 15 seconds. Recent activity and import success use the latest 100 import records, while health uses the existing 30-day summary; selected-period values are in **Statistics history**.
 
 ## Usenet traffic overview
 

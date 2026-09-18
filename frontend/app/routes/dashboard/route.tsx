@@ -15,12 +15,13 @@ export async function loader({ request }: Route.LoaderArgs) {
     const period = ["day", "week", "month"].includes(requestedPeriod) ? requestedPeriod : "day";
     const requestedDate = search.get("date") ?? "";
     const date = /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) ? requestedDate : new Date().toISOString().slice(0, 10);
-    const [queue, history, health, statistics] = await Promise.allSettled([
+    const [queue, history, health, statistics, library] = await Promise.allSettled([
         backendClient.getQueue(100), backendClient.getHistory(100), backendClient.getHealthCheckHistory(1),
-        backendClient.getDashboardStatistics(period, date),
+        backendClient.getDashboardStatistics(period, date), backendClient.getLibraryStatistics(),
     ]);
     return {
         period, date,
+        library: library.status === "fulfilled" ? library.value : null,
         statistics: statistics.status === "fulfilled" ? statistics.value : null,
         queue: queue.status === "fulfilled" ? queue.value : null,
         history: history.status === "fulfilled" ? history.value : null,
@@ -80,7 +81,7 @@ const bytes = (value: number) => {
     return `${(value / 1024 ** unit).toFixed(unit ? 1 : 0)} ${["B", "KiB", "MiB", "GiB", "TiB"][unit]}`;
 };
 
-export default function Dashboard({ loaderData: { queue, history, health, statistics, period, date } }: Route.ComponentProps) {
+export default function Dashboard({ loaderData: { queue, history, health, statistics, library, period, date } }: Route.ComponentProps) {
     const { current, samples, connected } = useConnections();
     const revalidator = useRevalidator();
     const [liveQueue, setLiveQueue] = useState<number | null>(null);
@@ -103,14 +104,14 @@ export default function Dashboard({ loaderData: { queue, history, health, statis
             <div><div className="dash-eyebrow">YOUR USENET AT A GLANCE</div><h1>Dashboard<span>.</span></h1><p>Connections, activity and library health. All in one place.</p></div>
             <button className="dash-button" disabled={revalidator.state !== "idle"} onClick={() => void revalidator.revalidate()}>{revalidator.state === "idle" ? "↻ Refresh" : "Refreshing…"}</button>
         </header>
-        {(!queue || !history || !health) && <div className="dash-warning" role="status">Some statistics are unavailable. Check your backend connection and refresh.</div>}
+        {(!queue || !history || !health || !library) && <div className="dash-warning" role="status">Some statistics are unavailable. Check your backend connection and refresh.</div>}
         <UsenetOverview>{usenet => <SectionOrder storageKey="dashboard-sections-v2" heading={usenet.heading} sidebar={usenet.sidebar} note={usenet.note} labels={{ metrics: "Live statistics", memory: "Article memory", usenetActivity: "Usenet activity", providers: "Providers", heatmap: "Activity heatmap", imports: "Import queue & summary", history: "Saved history", connections: "Connection activity", pool: "Connection pool", activity: "Recent imports", health: "Library health" }}>
         {usenet.sections}
         <section className="dash-metrics" aria-label="Overview">
             <Metric label="Active connections" value={number(active)} caption={current ? `of ${current.max} available connections` : "Waiting for Usenet telemetry"} />
             <Metric label="In queue" value={number(liveQueue ?? queue?.noofslots)} caption="NZBs waiting or processing" />
             <Metric label="Successful imports" value={history?.slots.length ? `${Math.round(completed / history.slots.length * 100)}%` : "—"} caption={`Across ${history?.slots.length ?? 0} recent history entries`} />
-            <Metric label="Imported size" value={history ? bytes(history.slots.filter(slot => slot.status === "Completed").reduce((sum, slot) => sum + slot.bytes, 0)) : "—"} caption="Completed NZBs in recent history" />
+            <Metric label="Imported size" value={library ? bytes(library.contentBytes) : "—"} caption="Files currently available in DAV" />
         </section>
         <HistoricalStatistics statistics={statistics} period={period} date={date} onQueueUpdate={setLiveQueue} />
 

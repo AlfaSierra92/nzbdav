@@ -67,6 +67,15 @@ class BackendClient {
         return data.authenticated;
     }
 
+    public async getLibraryStatistics(): Promise<{ contentBytes: number }> {
+        const response = await fetch(`${process.env.BACKEND_URL}/api/library-statistics`, {
+            headers: { "x-api-key": process.env.FRONTEND_BACKEND_API_KEY || "" },
+            signal: AbortSignal.timeout(10000),
+        });
+        if (!response.ok) throw new Error("Library statistics unavailable");
+        return response.json();
+    }
+
     public async getDashboardStatistics(period: string, date: string): Promise<DashboardStatistics> {
         const query = new URLSearchParams({ period, date });
         const response = await fetch(`${process.env.BACKEND_URL}/api/dashboard-statistics?${query}`, {
